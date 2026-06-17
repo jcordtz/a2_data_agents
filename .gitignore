@@ -1,0 +1,37 @@
+# Ignore config files with secrets
+agent_config.ini
+oracle_config.ini
+local.settings.json
+infra/main.parameters.json
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
+.venv/
+*.egg-info/
+dist/
+build/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Azure Functions
+.python_packages/
+.funcignore
+bin/
+obj/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log

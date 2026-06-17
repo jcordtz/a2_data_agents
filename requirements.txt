@@ -1,0 +1,14 @@
+# Oracle Database
+oracledb>=2.0.0
+
+# Data Processing
+pandas>=2.0.0
+
+# Azure Functions
+azure-functions>=1.17.0
+
+# Azure OpenAI
+openai>=1.12.0
+
+# Optional: For local development
+python-dotenv>=1.0.0

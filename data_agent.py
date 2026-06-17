@@ -1,8 +1,116 @@
 """
 Azure AI Data Agent
+================================================================================
 
-An AI agent that uses Azure OpenAI to interpret natural language queries
-and execute them against an Oracle database, returning results as DataFrames.
+An intelligent AI agent powered by Azure OpenAI that enables natural language
+querying of Oracle databases. The agent interprets user questions, generates
+appropriate SQL queries, and returns results as pandas DataFrames.
+
+FUNCTIONALITY
+-------------
+This module provides:
+    - Natural language to SQL translation using Azure OpenAI
+    - Automatic table discovery and schema understanding
+    - Multi-language support with automatic translation (30+ languages)
+    - Table capability descriptions in business-friendly language
+    - Statistical analysis tools (describe, correlation, groupby, etc.)
+    - Conversation memory for context-aware follow-up questions
+
+USAGE
+-----
+Basic usage with context manager:
+
+    from data_agent import DataAgent
+
+    with DataAgent("agent_config.ini") as agent:
+        # Ask questions in natural language
+        response = agent.ask("What tables are available?")
+        print(response.answer)
+        
+        # Query data
+        response = agent.ask("Show me the top 10 employees by salary")
+        print(response.answer)
+        if response.data is not None:
+            print(response.data)
+        
+        # Get table descriptions in configured language
+        description = agent.describe_table_capabilities("EMPLOYEES")
+        print(description.description)
+
+Manual connection management:
+
+    agent = DataAgent("agent_config.ini")
+    
+    response = agent.ask("How many records are in the ORDERS table?")
+    print(response.answer)
+    
+    # Reset conversation for new context
+    agent.reset_conversation()
+    
+    agent.close()
+
+CONFIGURATION FILE FORMAT (agent_config.ini)
+--------------------------------------------
+    [azure_openai]
+    endpoint = https://your-resource.openai.azure.com/
+    api_key = your-api-key
+    api_version = 2024-02-15-preview
+    deployment_name = gpt-4o
+
+    [oracle]
+    host = your-oracle-host
+    port = 1521
+    service_name = ORCL
+    username = your_username
+    password = your_password
+    schema = your_schema
+    country = DK  # Language for responses (DK=Danish, US=English, etc.)
+
+    [agent]
+    max_iterations = 10
+    temperature = 0.0
+    system_prompt = You are a helpful data analyst assistant.
+
+SUPPORTED LANGUAGES
+-------------------
+Set the 'country' parameter to change response language:
+    US/GB (English), DK (Danish), DE (German), FR (French), ES (Spanish),
+    NL (Dutch), IT (Italian), PT/BR (Portuguese), JP (Japanese),
+    CN/TW (Chinese), KR (Korean), and many more.
+
+DEPENDENCIES
+------------
+    - openai >= 1.12.0
+    - pandas >= 2.0.0
+    - oracledb >= 2.0.0
+
+Install with: pip install openai pandas oracledb
+
+LICENSE
+-------
+MIT License
+
+Copyright (c) 2026
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+DISCLAIMER
+----------
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
 """
 
 import json

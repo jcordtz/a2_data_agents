@@ -1,7 +1,118 @@
 """
 Azure Function App for Data Agent
+================================================================================
 
-This module provides HTTP endpoints for the AI Data Agent to run as an Azure Function.
+An Azure Functions application that exposes the AI Data Agent as RESTful HTTP
+endpoints, enabling natural language database querying via web API calls.
+
+FUNCTIONALITY
+-------------
+This module provides the following HTTP endpoints:
+
+    POST /api/query
+        Query the database using natural language.
+        Request body: {"question": "your question", "reset_conversation": false}
+        Response: {"answer": "...", "sql_executed": "...", "data": [...]}
+
+    GET /api/tables
+        List all available tables in the database.
+        Response: {"tables": ["TABLE1", "TABLE2", ...]}
+
+    GET /api/table/{table_name}/structure
+        Get the structure/schema of a specific table.
+        Response: {"table_name": "...", "columns": [...]}
+
+    GET /api/health
+        Health check endpoint.
+        Response: {"status": "healthy"}
+
+    POST /api/reset
+        Reset the agent's conversation history.
+        Response: {"status": "conversation reset"}
+
+USAGE
+-----
+Local development:
+
+    # Install Azure Functions Core Tools
+    # https://docs.microsoft.com/azure/azure-functions/functions-run-local
+    
+    func start
+
+Deployment to Azure:
+
+    # Using Azure CLI
+    func azure functionapp publish <your-function-app-name>
+
+    # Or use the provided deploy.sh script
+    ./deploy.sh
+
+API Example (cURL):
+
+    curl -X POST https://your-function.azurewebsites.net/api/query \
+      -H "Content-Type: application/json" \
+      -H "x-functions-key: your-function-key" \
+      -d '{"question": "How many employees are there?"}'
+
+API Example (Python):
+
+    import requests
+    
+    response = requests.post(
+        "https://your-function.azurewebsites.net/api/query",
+        json={"question": "What is the average salary?"},
+        headers={"x-functions-key": "your-function-key"}
+    )
+    print(response.json()["answer"])
+
+ENVIRONMENT VARIABLES
+---------------------
+Configure via local.settings.json (local) or Application Settings (Azure):
+
+    AGENT_CONFIG_PATH      - Path to agent configuration file
+    AZURE_OPENAI_ENDPOINT  - Azure OpenAI endpoint URL
+    AZURE_OPENAI_API_KEY   - Azure OpenAI API key
+    AZURE_OPENAI_DEPLOYMENT - Model deployment name
+    ORACLE_HOST            - Oracle database host
+    ORACLE_PORT            - Oracle database port
+    ORACLE_SERVICE_NAME    - Oracle service name
+    ORACLE_USERNAME        - Oracle username
+    ORACLE_PASSWORD        - Oracle password
+
+DEPENDENCIES
+------------
+    - azure-functions >= 1.17.0
+    - openai >= 1.12.0
+    - pandas >= 2.0.0
+    - oracledb >= 2.0.0
+
+Install with: pip install -r requirements.txt
+
+LICENSE
+-------
+MIT License
+
+Copyright (c) 2026
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+DISCLAIMER
+----------
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
 """
 
 import json

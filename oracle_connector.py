@@ -1,10 +1,90 @@
 """
 Oracle Database Connector Module
+================================================================================
 
-This module provides functionality to:
-1. Connect to an Oracle database using parameters from a config file
-2. Query table structures and metadata
-3. Load table data into pandas DataFrames for querying
+A Python module for connecting to Oracle databases and querying table metadata
+and data, with results returned as pandas DataFrames for easy analysis.
+
+FUNCTIONALITY
+-------------
+This module provides:
+    - Oracle database connection management (single connections and connection pools)
+    - Table structure/schema querying (columns, data types, constraints, indexes)
+    - Table and column comment retrieval from Oracle metadata
+    - SQL query execution with DataFrame results
+    - Table data loading with filtering and pagination
+
+USAGE
+-----
+Basic usage with context manager:
+
+    from oracle_connector import OracleConnector
+
+    with OracleConnector("oracle_config.ini") as oracle:
+        # List all tables
+        tables = oracle.list_tables()
+        
+        # Get table structure
+        structure = oracle.get_table_structure("EMPLOYEES")
+        
+        # Query data into DataFrame
+        df = oracle.table_to_dataframe("EMPLOYEES", limit=100)
+        
+        # Execute custom SQL
+        result = oracle.query_to_dataframe("SELECT * FROM EMPLOYEES WHERE SALARY > 50000")
+
+Manual connection management:
+
+    oracle = OracleConnector("oracle_config.ini")
+    oracle.connect(use_pool=True)  # Use connection pooling
+    
+    # ... perform operations ...
+    
+    oracle.disconnect()
+
+CONFIGURATION FILE FORMAT (oracle_config.ini)
+---------------------------------------------
+    [oracle]
+    host = localhost
+    port = 1521
+    service_name = ORCL
+    username = your_username
+    password = your_password
+    schema = your_schema
+    country = DK
+
+DEPENDENCIES
+------------
+    - oracledb >= 2.0.0
+    - pandas >= 2.0.0
+
+Install with: pip install oracledb pandas
+
+LICENSE
+-------
+MIT License
+
+Copyright (c) 2026
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+DISCLAIMER
+----------
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
 """
 
 import configparser

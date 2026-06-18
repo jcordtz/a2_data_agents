@@ -494,6 +494,228 @@ class OracleConnector:
             "comments": self.get_table_comments(table_name, schema),
         }
 
+    def get_foreign_keys(
+        self, table_name: str, schema: Optional[str] = None
+    ) -> pd.DataFrame:
+        """
+        Get foreign key relationships for a table, including referenced table and column information.
+
+        Args:
+            table_name: Name of the table
+            schema: Schema/owner of the table
+
+        Returns:
+            DataFrame with foreign key information including referenced tables and columns
+        """
+        resolved_schema = self._get_schema(schema)
+
+        query = text("""
+            SELECT 
+                a.constraint_name AS fk_constraint_name,
+                a.column_name AS fk_column,
+                a.position AS fk_position,
+                c_pk.table_name AS referenced_table,
+                c_pk.owner AS referenced_schema,
+                b.column_name AS referenced_column
+            FROM all_cons_columns a
+            JOIN all_constraints c 
+                ON a.constraint_name = c.constraint_name 
+                AND a.owner = c.owner
+            JOIN all_constraints c_pk 
+                ON c.r_constraint_name = c_pk.constraint_name
+                AND c.r_owner = c_pk.owner
+            JOIN all_cons_columns b 
+                ON c_pk.constraint_name = b.constraint_name 
+                AND c_pk.owner = b.owner
+                AND a.position = b.position
+            WHERE c.constraint_type = 'R'
+              AND a.table_name = UPPER(:table_name)
+              AND a.owner = UPPER(:schema)
+            ORDER BY a.constraint_name, a.position
+        """)
+
+        with self._ensure_engine().connect() as conn:
+            df = pd.read_sql(query, conn, params={"table_name": table_name, "schema": resolved_schema})
+            return df
+
+    def get_table_description(
+        self, table_name: str, schema: Optional[str] = None
+    ) -> str:
+        """
+        Generate a human-readable description of a table including comments and join information.
+
+        Args:
+            table_name: Name of the table
+            schema: Schema/owner of the table
+
+        Returns:
+            A formatted string describing the table, its columns, and how to join with other tables
+        """
+        resolved_schema = self._get_schema(schema)
+        
+        # Get table structure
+        structure = self.get_table_structure(table_name, schema)
+        
+        # Get comments
+        comments_info = self.get_table_comments(table_name, schema)
+        table_comment = comments_info.get("table_comment")
+        column_comments_df = comments_info.get("column_comments", pd.DataFrame())
+        
+        # Get foreign keys
+        foreign_keys = self.get_foreign_keys(table_name, schema)
+        
+        # Build column comments lookup
+        column_comments: Dict[str, str] = {}
+        if not column_comments_df.empty:
+            for _, row in column_comments_df.iterrows():
+                col_name = row.get("COLUMN_NAME") or row.get("column_name")
+                comment = row.get("COMMENTS") or row.get("comments")
+                if col_name and comment:
+                    column_comments[col_name.upper()] = comment
+        
+        # Start building the essay
+        paragraphs: List[str] = []
+        
+        # Opening paragraph - table introduction
+        table_full_name = f"{resolved_schema}.{table_name.upper()}"
+        if table_comment:
+            paragraphs.append(
+                f"The {table_full_name} table {table_comment.lower().rstrip('.')}. "
+                f"This table is located in the {resolved_schema} schema."
+            )
+        else:
+            paragraphs.append(
+                f"The {table_full_name} table is located in the {resolved_schema} schema."
+            )
+        
+        # Column descriptions paragraph
+        if not structure.empty:
+            column_descriptions = []
+            for _, row in structure.iterrows():
+                col_name = row.get("COLUMN_NAME") or row.get("column_name")
+                data_type = row.get("DATA_TYPE") or row.get("data_type")
+                nullable = row.get("NULLABLE") or row.get("nullable")
+                
+                # Build data type description
+                data_length = row.get("DATA_LENGTH") or row.get("data_length")
+                data_precision = row.get("DATA_PRECISION") or row.get("data_precision")
+                data_scale = row.get("DATA_SCALE") or row.get("data_scale")
+                
+                type_desc = self._get_friendly_type_name(str(data_type), data_length, data_precision, data_scale)
+                required_str = "required" if nullable != "Y" else "optional"
+                
+                col_comment = column_comments.get(col_name.upper() if col_name else "", "")
+                
+                if col_comment:
+                    column_descriptions.append(
+                        f"{col_name} ({type_desc}, {required_str}) which {col_comment.lower().rstrip('.')}"
+                    )
+                else:
+                    column_descriptions.append(f"{col_name} ({type_desc}, {required_str})")
+            
+            num_cols = len(column_descriptions)
+            paragraphs.append(
+                f"The table contains {num_cols} column{'s' if num_cols != 1 else ''}: "
+                f"{', '.join(column_descriptions[:-1])}"
+                f"{', and ' + column_descriptions[-1] if len(column_descriptions) > 1 else column_descriptions[0]}."
+            )
+        
+        # Foreign key relationships paragraph
+        if not foreign_keys.empty:
+            # Group by constraint name for multi-column FKs
+            fk_groups: Dict[str, List[Dict[str, Any]]] = {}
+            for _, row in foreign_keys.iterrows():
+                fk_name = row.get("FK_CONSTRAINT_NAME") or row.get("fk_constraint_name")
+                if fk_name is not None:
+                    if fk_name not in fk_groups:
+                        fk_groups[fk_name] = []
+                    fk_groups[fk_name].append(dict(row))
+            
+            relationship_descriptions = []
+            for fk_name, fk_rows in fk_groups.items():
+                first_row = fk_rows[0]
+                ref_schema = first_row.get("REFERENCED_SCHEMA") or first_row.get("referenced_schema")
+                ref_table = first_row.get("REFERENCED_TABLE") or first_row.get("referenced_table")
+                
+                # Build join condition description
+                join_parts = []
+                for fk_row in sorted(fk_rows, key=lambda x: x.get("FK_POSITION") or x.get("fk_position") or 0):
+                    fk_col = fk_row.get("FK_COLUMN") or fk_row.get("fk_column")
+                    ref_col = fk_row.get("REFERENCED_COLUMN") or fk_row.get("referenced_column")
+                    join_parts.append(f"{fk_col} to {ref_col}")
+                
+                join_desc = " and ".join(join_parts)
+                relationship_descriptions.append(
+                    f"the {ref_schema}.{ref_table} table by matching {join_desc}"
+                )
+            
+            num_rels = len(relationship_descriptions)
+            paragraphs.append(
+                f"This table can be joined with {', '.join(relationship_descriptions[:-1])}"
+                f"{', and ' + relationship_descriptions[-1] if len(relationship_descriptions) > 1 else relationship_descriptions[0]}."
+                if num_rels > 1 else
+                f"This table can be joined with {relationship_descriptions[0]}."
+            )
+            
+            # Add SQL examples
+            sql_examples = []
+            for fk_name, fk_rows in fk_groups.items():
+                first_row = fk_rows[0]
+                ref_schema = first_row.get("REFERENCED_SCHEMA") or first_row.get("referenced_schema")
+                ref_table = first_row.get("REFERENCED_TABLE") or first_row.get("referenced_table")
+                
+                join_conditions = []
+                for fk_row in sorted(fk_rows, key=lambda x: x.get("FK_POSITION") or x.get("fk_position") or 0):
+                    fk_col = fk_row.get("FK_COLUMN") or fk_row.get("fk_column")
+                    ref_col = fk_row.get("REFERENCED_COLUMN") or fk_row.get("referenced_column")
+                    join_conditions.append(f"{table_name.upper()}.{fk_col} = {ref_table}.{ref_col}")
+                
+                sql_examples.append(f"JOIN {ref_schema}.{ref_table} ON {' AND '.join(join_conditions)}")
+            
+            paragraphs.append(
+                f"To perform these joins in SQL, you can use: {'; '.join(sql_examples)}."
+            )
+        else:
+            paragraphs.append(
+                "This table does not have any foreign key relationships defined, "
+                "meaning it is either a standalone reference table or its relationships "
+                "are managed at the application level."
+            )
+        
+        return "\n\n".join(paragraphs)
+
+    def _get_friendly_type_name(
+        self, data_type: str, data_length: Any, data_precision: Any, data_scale: Any
+    ) -> str:
+        """Convert Oracle data type to a friendly description."""
+        type_map = {
+            "VARCHAR2": "text",
+            "NVARCHAR2": "unicode text",
+            "CHAR": "fixed-length text",
+            "NCHAR": "fixed-length unicode text",
+            "NUMBER": "number",
+            "INTEGER": "integer",
+            "FLOAT": "decimal number",
+            "DATE": "date",
+            "TIMESTAMP": "timestamp",
+            "CLOB": "large text",
+            "NCLOB": "large unicode text",
+            "BLOB": "binary data",
+            "RAW": "binary data",
+        }
+        
+        friendly_type = type_map.get(data_type, data_type.lower())
+        
+        if data_type in ("VARCHAR2", "NVARCHAR2", "CHAR", "NCHAR") and data_length and pd.notna(data_length):
+            friendly_type += f" up to {int(data_length)} characters"
+        elif data_type == "NUMBER" and data_precision and pd.notna(data_precision):
+            if data_scale and pd.notna(data_scale) and int(data_scale) > 0:
+                friendly_type = f"decimal with {int(data_precision)} digits and {int(data_scale)} decimal places"
+            else:
+                friendly_type = f"integer up to {int(data_precision)} digits"
+        
+        return friendly_type
+
     def __enter__(self) -> "OracleConnector":
         """Context manager entry."""
         self.connect()

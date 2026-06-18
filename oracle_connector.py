@@ -463,11 +463,17 @@ class OracleConnector:
                 column_comments_query, conn, params={"table_name": table_name, "schema": resolved_schema}
             )
 
-            table_comment = (
-                table_comment_df.iloc[0]["COMMENTS"]
-                if not table_comment_df.empty and table_comment_df.iloc[0]["COMMENTS"]
-                else None
-            )
+            # Handle case-insensitive column names (Oracle may return uppercase or lowercase)
+            table_comment = None
+            if not table_comment_df.empty:
+                # Get the comments column regardless of case
+                comments_col = None
+                for col in table_comment_df.columns:
+                    if col.upper() == "COMMENTS":
+                        comments_col = col
+                        break
+                if comments_col and table_comment_df.iloc[0][comments_col]:
+                    table_comment = table_comment_df.iloc[0][comments_col]
 
             return {
                 "table_comment": table_comment,
@@ -682,6 +688,21 @@ class OracleConnector:
                 "are managed at the application level."
             )
         
+        # Technical section - connection information (at the end)
+        host = self.config.get("host", "unknown")
+        port = self.config.get("port", 1521)
+        service_name = self.config.get("service_name")
+        sid = self.config.get("sid")
+        db_identifier = service_name if service_name else sid
+        db_type = "service" if service_name else "SID"
+        
+        technical_info = (
+            f"Technical Information: This data resides in an Oracle Database. "
+            f"Connection details: Host: {host}, Port: {port}, {db_type}: {db_identifier}. "
+            f"Schema: {resolved_schema}."
+        )
+        paragraphs.append(technical_info)
+        
         return "\n\n".join(paragraphs)
 
     def _get_friendly_type_name(
@@ -778,6 +799,27 @@ if __name__ == "__main__":
             print(employees_df.describe())
 
         oracle.disconnect()
+
+    except FileNotFoundError as e:
+        print(f"Config file not found: {e}")
+    except Exception as e:
+        print(f"Error: {e}")
+
+    # Example 3: Get human-readable table description
+    print("\nExample 3: Human-readable table description")
+    print("-" * 50)
+
+    try:
+        with OracleConnector("oracle_config.ini") as oracle:
+            # Get essay-style description of a table
+            description = oracle.get_table_description("EMPLOYEES")
+            print("Table Description:")
+            print(description)
+
+            # You can also get the foreign keys separately
+            print("\n\nForeign Keys DataFrame:")
+            fk_df = oracle.get_foreign_keys("EMPLOYEES")
+            print(fk_df)
 
     except FileNotFoundError as e:
         print(f"Config file not found: {e}")

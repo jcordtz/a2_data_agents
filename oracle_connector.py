@@ -8,7 +8,7 @@ and data, with results returned as pandas DataFrames for easy analysis.
 FUNCTIONALITY
 -------------
 This module provides:
-    - Oracle database connection management (single connections and connection pools)
+    - Oracle database connection management using SQLAlchemy with connection pooling
     - Table structure/schema querying (columns, data types, constraints, indexes)
     - Table and column comment retrieval from Oracle metadata
     - SQL query execution with DataFrame results
@@ -36,7 +36,7 @@ Basic usage with context manager:
 Manual connection management:
 
     oracle = OracleConnector("oracle_config.ini")
-    oracle.connect(use_pool=True)  # Use connection pooling
+    oracle.connect(use_pool=True)  # Use connection pooling (default with SQLAlchemy)
     
     # ... perform operations ...
     
@@ -56,11 +56,12 @@ CONFIGURATION FILE FORMAT (oracle_config.ini)
 
 DEPENDENCIES
 ------------
+    - sqlalchemy >= 2.0.0
     - oracledb >= 2.0.0 (uses thick mode with Oracle Client libraries)
     - pandas >= 2.0.0
     - Oracle Instant Client libraries (required for thick mode)
 
-Install with: pip install oracledb pandas
+Install with: pip install sqlalchemy oracledb pandas
 
 LICENSE
 -------
@@ -101,10 +102,19 @@ except ImportError:
         "oracledb package is required. Install it with: pip install oracledb"
     )
 
+try:
+    from sqlalchemy import create_engine, text
+    from sqlalchemy.engine import Engine
+    from sqlalchemy.pool import QueuePool, NullPool
+except ImportError:
+    raise ImportError(
+        "sqlalchemy package is required. Install it with: pip install sqlalchemy"
+    )
+
 
 class OracleConnector:
     """
-    A class to manage Oracle database connections and table operations.
+    A class to manage Oracle database connections and table operations using SQLAlchemy.
     """
 
     def __init__(self, config_path: str = "oracle_config.ini"):
@@ -116,8 +126,7 @@ class OracleConnector:
         """
         self.config_path = Path(config_path)
         self.config = self._load_config()
-        self.connection: Optional[oracledb.Connection] = None
-        self.pool: Optional[oracledb.ConnectionPool] = None
+        self.engine: Optional[Engine] = None
 
     def _load_config(self) -> Dict[str, Any]:
         """Load configuration from the INI file."""
@@ -130,7 +139,7 @@ class OracleConnector:
         if "oracle" not in parser.sections():
             raise ValueError("Config file must contain an [oracle] section")
 
-        config = dict(parser["oracle"])
+        config: Dict[str, Any] = dict(parser["oracle"])
 
         # Convert port to integer
         config["port"] = int(config.get("port", 1521))
@@ -143,29 +152,28 @@ class OracleConnector:
 
         return config
 
-    def _get_dsn(self) -> str:
-        """Build the Oracle DSN (Data Source Name) string."""
+    def _get_connection_url(self) -> str:
+        """Build the SQLAlchemy connection URL for Oracle."""
+        username = self.config["username"]
+        password = self.config["password"]
+        host = self.config["host"]
+        port = self.config["port"]
+        
         if "service_name" in self.config:
-            return oracledb.makedsn(
-                host=self.config["host"],
-                port=self.config["port"],
-                service_name=self.config["service_name"],
-            )
+            # Use service_name format
+            return f"oracle+oracledb://{username}:{password}@{host}:{port}/?service_name={self.config['service_name']}"
         elif "sid" in self.config:
-            return oracledb.makedsn(
-                host=self.config["host"],
-                port=self.config["port"],
-                sid=self.config["sid"],
-            )
+            # Use SID format
+            return f"oracle+oracledb://{username}:{password}@{host}:{port}/{self.config['sid']}"
         else:
             raise ValueError("Config must specify either 'service_name' or 'sid'")
 
-    def connect(self, use_pool: bool = False) -> "OracleConnector":
+    def connect(self, use_pool: bool = True) -> "OracleConnector":
         """
-        Establish a connection to the Oracle database.
+        Establish a connection to the Oracle database using SQLAlchemy.
 
         Args:
-            use_pool: If True, create a connection pool instead of single connection
+            use_pool: If True (default), use connection pooling. If False, disable pooling.
 
         Returns:
             Self for method chaining
@@ -179,42 +187,49 @@ class OracleConnector:
             # Already initialized - ignore
             pass
 
-        dsn = self._get_dsn()
+        connection_url = self._get_connection_url()
 
         if use_pool:
-            self.pool = oracledb.create_pool(
-                user=self.config["username"],
-                password=self.config["password"],
-                dsn=dsn,
-                min=self.config.get("min_connections", 1),
-                max=self.config.get("max_connections", 5),
+            self.engine = create_engine(
+                connection_url,
+                poolclass=QueuePool,
+                pool_size=self.config.get("min_connections", 1),
+                max_overflow=self.config.get("max_connections", 5) - self.config.get("min_connections", 1),
+                pool_pre_ping=True,
             )
         else:
-            self.connection = oracledb.connect(
-                user=self.config["username"],
-                password=self.config["password"],
-                dsn=dsn,
+            self.engine = create_engine(
+                connection_url,
+                poolclass=NullPool,
             )
 
         return self
 
-    def get_connection(self) -> oracledb.Connection:
-        """Get a database connection (from pool or direct)."""
-        if self.pool:
-            return self.pool.acquire()
-        elif self.connection:
-            return self.connection
+    def get_connection(self):
+        """Get a database connection from the SQLAlchemy engine."""
+        if self.engine:
+            return self.engine.connect()
         else:
             raise ConnectionError("Not connected. Call connect() first.")
 
     def disconnect(self) -> None:
-        """Close the database connection or pool."""
-        if self.connection:
-            self.connection.close()
-            self.connection = None
-        if self.pool:
-            self.pool.close()
-            self.pool = None
+        """Dispose of the SQLAlchemy engine and close all connections."""
+        if self.engine:
+            self.engine.dispose()
+            self.engine = None
+
+    def _get_schema(self, schema: Optional[str] = None) -> str:
+        """Get the schema to use, defaulting to config schema or username."""
+        result = schema or self.config.get("schema") or self.config.get("username")
+        if not result:
+            raise ValueError("Schema not specified and no default schema or username in config")
+        return result
+
+    def _ensure_engine(self) -> Engine:
+        """Ensure the engine is initialized and return it."""
+        if self.engine is None:
+            raise ConnectionError("Not connected. Call connect() first.")
+        return self.engine
 
     def get_table_structure(
         self, table_name: str, schema: Optional[str] = None
@@ -229,9 +244,9 @@ class OracleConnector:
         Returns:
             DataFrame with column information (name, type, nullable, etc.)
         """
-        schema = schema or self.config.get("schema") or self.config["username"]
+        resolved_schema = self._get_schema(schema)
 
-        query = """
+        query = text("""
             SELECT 
                 column_name,
                 data_type,
@@ -245,17 +260,11 @@ class OracleConnector:
             WHERE table_name = UPPER(:table_name)
               AND owner = UPPER(:schema)
             ORDER BY column_id
-        """
+        """)
 
-        conn = self.get_connection()
-        try:
-            df = pd.read_sql(
-                query, conn, params={"table_name": table_name, "schema": schema}
-            )
+        with self._ensure_engine().connect() as conn:
+            df = pd.read_sql(query, conn, params={"table_name": table_name, "schema": resolved_schema})
             return df
-        finally:
-            if self.pool:
-                self.pool.release(conn)
 
     def get_table_constraints(
         self, table_name: str, schema: Optional[str] = None
@@ -270,9 +279,9 @@ class OracleConnector:
         Returns:
             DataFrame with constraint information
         """
-        schema = schema or self.config.get("schema") or self.config["username"]
+        resolved_schema = self._get_schema(schema)
 
-        query = """
+        query = text("""
             SELECT 
                 c.constraint_name,
                 c.constraint_type,
@@ -286,17 +295,11 @@ class OracleConnector:
             WHERE c.table_name = UPPER(:table_name)
               AND c.owner = UPPER(:schema)
             ORDER BY c.constraint_name, cc.position
-        """
+        """)
 
-        conn = self.get_connection()
-        try:
-            df = pd.read_sql(
-                query, conn, params={"table_name": table_name, "schema": schema}
-            )
+        with self._ensure_engine().connect() as conn:
+            df = pd.read_sql(query, conn, params={"table_name": table_name, "schema": resolved_schema})
             return df
-        finally:
-            if self.pool:
-                self.pool.release(conn)
 
     def get_table_indexes(
         self, table_name: str, schema: Optional[str] = None
@@ -311,9 +314,9 @@ class OracleConnector:
         Returns:
             DataFrame with index information
         """
-        schema = schema or self.config.get("schema") or self.config["username"]
+        resolved_schema = self._get_schema(schema)
 
-        query = """
+        query = text("""
             SELECT 
                 i.index_name,
                 i.index_type,
@@ -327,17 +330,11 @@ class OracleConnector:
             WHERE i.table_name = UPPER(:table_name)
               AND i.owner = UPPER(:schema)
             ORDER BY i.index_name, ic.column_position
-        """
+        """)
 
-        conn = self.get_connection()
-        try:
-            df = pd.read_sql(
-                query, conn, params={"table_name": table_name, "schema": schema}
-            )
+        with self._ensure_engine().connect() as conn:
+            df = pd.read_sql(query, conn, params={"table_name": table_name, "schema": resolved_schema})
             return df
-        finally:
-            if self.pool:
-                self.pool.release(conn)
 
     def list_tables(self, schema: Optional[str] = None) -> pd.DataFrame:
         """
@@ -349,9 +346,9 @@ class OracleConnector:
         Returns:
             DataFrame with table names and metadata
         """
-        schema = schema or self.config.get("schema") or self.config["username"]
+        resolved_schema = self._get_schema(schema)
 
-        query = """
+        query = text("""
             SELECT 
                 table_name,
                 num_rows,
@@ -360,15 +357,11 @@ class OracleConnector:
             FROM all_tables
             WHERE owner = UPPER(:schema)
             ORDER BY table_name
-        """
+        """)
 
-        conn = self.get_connection()
-        try:
-            df = pd.read_sql(query, conn, params={"schema": schema})
+        with self._ensure_engine().connect() as conn:
+            df = pd.read_sql(query, conn, params={"schema": resolved_schema})
             return df
-        finally:
-            if self.pool:
-                self.pool.release(conn)
 
     def query_to_dataframe(
         self, query: str, params: Optional[Dict[str, Any]] = None
@@ -383,13 +376,9 @@ class OracleConnector:
         Returns:
             DataFrame with query results
         """
-        conn = self.get_connection()
-        try:
-            df = pd.read_sql(query, conn, params=params or {})
+        with self._ensure_engine().connect() as conn:
+            df = pd.read_sql(text(query), conn, params=params or {})
             return df
-        finally:
-            if self.pool:
-                self.pool.release(conn)
 
     def table_to_dataframe(
         self,
@@ -412,19 +401,23 @@ class OracleConnector:
         Returns:
             DataFrame with table data
         """
-        schema = schema or self.config.get("schema") or self.config["username"]
+        resolved_schema = self._get_schema(schema)
 
         # Build column list
         col_str = ", ".join(columns) if columns else "*"
 
         # Build query
-        query = f"SELECT {col_str} FROM {schema}.{table_name}"
+        query = f"SELECT {col_str} FROM {resolved_schema}.{table_name}"
 
         if where_clause:
             query += f" WHERE {where_clause}"
 
         if limit:
-            query += f" FETCH FIRST {limit} ROWS ONLY"
+            # Use ROWNUM for broader Oracle compatibility
+            if where_clause:
+                query += f" AND ROWNUM <= {limit}"
+            else:
+                query += f" WHERE ROWNUM <= {limit}"
 
         return self.query_to_dataframe(query)
 
@@ -441,18 +434,18 @@ class OracleConnector:
         Returns:
             Dictionary with 'table_comment' and 'column_comments' DataFrame
         """
-        schema = schema or self.config.get("schema") or self.config["username"]
+        resolved_schema = self._get_schema(schema)
 
         # Get table comment
-        table_comment_query = """
+        table_comment_query = text("""
             SELECT comments
             FROM all_tab_comments
             WHERE table_name = UPPER(:table_name)
               AND owner = UPPER(:schema)
-        """
+        """)
 
         # Get column comments
-        column_comments_query = """
+        column_comments_query = text("""
             SELECT 
                 column_name,
                 comments
@@ -460,15 +453,14 @@ class OracleConnector:
             WHERE table_name = UPPER(:table_name)
               AND owner = UPPER(:schema)
             ORDER BY column_name
-        """
+        """)
 
-        conn = self.get_connection()
-        try:
+        with self._ensure_engine().connect() as conn:
             table_comment_df = pd.read_sql(
-                table_comment_query, conn, params={"table_name": table_name, "schema": schema}
+                table_comment_query, conn, params={"table_name": table_name, "schema": resolved_schema}
             )
             column_comments_df = pd.read_sql(
-                column_comments_query, conn, params={"table_name": table_name, "schema": schema}
+                column_comments_query, conn, params={"table_name": table_name, "schema": resolved_schema}
             )
 
             table_comment = (
@@ -481,9 +473,6 @@ class OracleConnector:
                 "table_comment": table_comment,
                 "column_comments": column_comments_df,
             }
-        finally:
-            if self.pool:
-                self.pool.release(conn)
 
     def get_full_table_info(
         self, table_name: str, schema: Optional[str] = None
@@ -530,7 +519,7 @@ if __name__ == "__main__":
 
             # Get structure of a specific table
             if not tables.empty:
-                first_table = tables.iloc[0]["TABLE_NAME"]
+                first_table = tables.iloc[0]["table_name"]
                 structure = oracle.get_table_structure(first_table)
                 print(f"\nStructure of {first_table}:")
                 print(structure)

@@ -1,5 +1,6 @@
 # Oracle Database
 oracledb>=2.0.0
+sqlalchemy>=2.0.0
 
 # Data Processing
 pandas>=2.0.0

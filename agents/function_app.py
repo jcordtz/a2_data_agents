@@ -4,7 +4,20 @@ Azure Function App for Data Agent
 
 An Azure Functions application that exposes the AI Data Agent as RESTful HTTP
 endpoints, enabling natural language database querying via web API calls.
+================================================================================
+DISCLAIMER
+================================================================================
+This code was generated with AI assistance (AI-generated code).
+It is provided "AS-IS" under the MIT License without warranty of any kind.
 
+Users should:
+- Review and test thoroughly before production use
+- Validate security implications for their specific use case
+- Ensure compliance with their organization's policies
+
+LICENSE: MIT License - Copyright (c) 2026
+See LICENSE file in project root for full license text.
+================================================================================
 FUNCTIONALITY
 -------------
 This module provides the following HTTP endpoints:
@@ -120,7 +133,7 @@ import logging
 import os
 import azure.functions as func
 
-from data_agent import DataAgent, AgentResponse
+from .data_agent import DataAgent, AgentResponse
 
 # Initialize the function app
 app = func.FunctionApp(http_auth_level=func.AuthLevel.FUNCTION)

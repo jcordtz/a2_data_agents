@@ -1,5 +1,25 @@
+// =============================================================================
 // Azure Infrastructure for Data Agent
+// =============================================================================
+// Deploys the Data Agent Azure Function with supporting resources.
+//
+// =============================================================================
+// DISCLAIMER
+// =============================================================================
+// This code was generated with AI assistance (AI-generated code).
+// It is provided "AS-IS" under the MIT License without warranty of any kind.
+//
+// Users should:
+// - Review and test thoroughly before production use
+// - Validate security implications for their specific use case
+// - Ensure compliance with their organization's policies
+//
+// LICENSE: MIT License - Copyright (c) 2026
+// See LICENSE file in project root for full license text.
+// =============================================================================
+//
 // Deploy with: az deployment group create -g <resource-group> -f infra/main.bicep
+// =============================================================================
 
 @description('Base name for all resources')
 param baseName string = 'dataagent'

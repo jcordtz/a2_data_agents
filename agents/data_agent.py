@@ -6,6 +6,21 @@ An intelligent AI agent powered by Azure OpenAI that enables natural language
 querying of Oracle databases. The agent interprets user questions, generates
 appropriate SQL queries, and returns results as pandas DataFrames.
 
+================================================================================
+DISCLAIMER
+================================================================================
+This code was generated with AI assistance (AI-generated code).
+It is provided "AS-IS" under the MIT License without warranty of any kind.
+
+Users should:
+- Review and test thoroughly before production use
+- Validate security implications for their specific use case
+- Ensure compliance with their organization's policies
+
+LICENSE: MIT License - Copyright (c) 2026
+See LICENSE file in project root for full license text.
+================================================================================
+
 FUNCTIONALITY
 -------------
 This module provides:
@@ -122,7 +137,11 @@ from dataclasses import dataclass, field
 import pandas as pd
 from openai import AzureOpenAI
 
-from oracle_connector import OracleConnector
+import sys
+from pathlib import Path
+# Add parent directory to path for imports
+sys.path.insert(0, str(Path(__file__).parent.parent))
+from oracle import OracleConnector
 
 
 # Country code to language mapping for natural language descriptions

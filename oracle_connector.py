@@ -52,11 +52,13 @@ CONFIGURATION FILE FORMAT (oracle_config.ini)
     password = your_password
     schema = your_schema
     country = DK
+    lib_dir = /path/to/oracle/instantclient  # Optional: path to Oracle Client libraries
 
 DEPENDENCIES
 ------------
-    - oracledb >= 2.0.0
+    - oracledb >= 2.0.0 (uses thick mode with Oracle Client libraries)
     - pandas >= 2.0.0
+    - Oracle Instant Client libraries (required for thick mode)
 
 Install with: pip install oracledb pandas
 
@@ -168,6 +170,15 @@ class OracleConnector:
         Returns:
             Self for method chaining
         """
+        # Initialize Oracle Client in thick mode
+        # lib_dir can be specified in config if Oracle Client is not in PATH
+        lib_dir = self.config.get("lib_dir")
+        try:
+            oracledb.init_oracle_client(lib_dir=lib_dir)
+        except oracledb.ProgrammingError:
+            # Already initialized - ignore
+            pass
+
         dsn = self._get_dsn()
 
         if use_pool:

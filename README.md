@@ -47,12 +47,12 @@ An overall **chatbot interface** then orchestrates these agents through a Model 
 
 ```
 ┌─────────────────────────────────────────────────────────────────────────────┐
-│                              AI Models (Claude, etc.)                        │
+│                              AI Models (Claude, etc.)                       │
 └─────────────────────────────────┬───────────────────────────────────────────┘
                                   │ MCP Protocol
                                   ▼
 ┌─────────────────────────────────────────────────────────────────────────────┐
-│                              MCP Server                                      │
+│                              MCP Server                                     │
 │  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐     │
 │  │ Tool Handler │  │   Registry   │  │  Resources   │  │     Auth     │     │
 │  └──────────────┘  └──────────────┘  └──────────────┘  └──────────────┘     │
@@ -68,8 +68,8 @@ An overall **chatbot interface** then orchestrates these agents through a Model 
          │                      │                      │
          └──────────────────────┼──────────────────────┘
                                 │ SQLAlchemy
-    ┌───────────────────────────┼───────────────────────────┐
-    ▼               ▼           ▼           ▼               ▼
+    ┌───────────────────────────┼───────────────────┐
+    ▼               ▼               ▼               ▼
 ┌─────────┐   ┌───────────┐   ┌──────────┐   ┌───────────┐
 │ Oracle  │   │SQL Server │   │PostgreSQL│   │ IBM DB2   │
 │Database │   │ Database  │   │ Database │   │ Database  │

@@ -2,7 +2,7 @@
 
 **A web-based chat interface for querying databases through the MCP Server.**
 
-A React-based chatbot UI that connects to the MCP Server, enabling natural language queries against Oracle, SQL Server, and PostgreSQL databases.
+A React-based chatbot UI that connects to the MCP Server, enabling natural language queries against Oracle, SQL Server, PostgreSQL, and IBM DB2 databases.
 
 > **⚠️ Disclaimer**: This code was generated with AI assistance (AI-generated code). It is provided "AS-IS" under the MIT License without warranty of any kind. Users should review and test thoroughly before production use.
 

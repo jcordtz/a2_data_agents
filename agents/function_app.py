@@ -86,18 +86,47 @@ Configure via local.settings.json (local) or Application Settings (Azure):
     AZURE_OPENAI_ENDPOINT  - Azure OpenAI endpoint URL
     AZURE_OPENAI_API_KEY   - Azure OpenAI API key
     AZURE_OPENAI_DEPLOYMENT - Model deployment name
+    DATABASE_TYPE          - Database type: oracle, mssql, postgres, db2
+    
+    # Oracle-specific:
     ORACLE_HOST            - Oracle database host
     ORACLE_PORT            - Oracle database port
     ORACLE_SERVICE_NAME    - Oracle service name
     ORACLE_USERNAME        - Oracle username
     ORACLE_PASSWORD        - Oracle password
+    
+    # SQL Server-specific:
+    MSSQL_HOST             - SQL Server host
+    MSSQL_PORT             - SQL Server port
+    MSSQL_DATABASE         - Database name
+    MSSQL_USERNAME         - SQL Server username
+    MSSQL_PASSWORD         - SQL Server password
+    
+    # PostgreSQL-specific:
+    POSTGRES_HOST          - PostgreSQL host
+    POSTGRES_PORT          - PostgreSQL port
+    POSTGRES_DATABASE      - Database name
+    POSTGRES_USERNAME      - PostgreSQL username
+    POSTGRES_PASSWORD      - PostgreSQL password
+    
+    # IBM DB2-specific:
+    DB2_HOST               - DB2 host
+    DB2_PORT               - DB2 port
+    DB2_DATABASE           - Database name
+    DB2_USERNAME           - DB2 username
+    DB2_PASSWORD           - DB2 password
 
 DEPENDENCIES
 ------------
     - azure-functions >= 1.17.0
     - openai >= 1.12.0
     - pandas >= 2.0.0
-    - oracledb >= 2.0.0
+    
+    Database-specific drivers (install one based on your database):
+    - Oracle: oracledb >= 2.0.0
+    - SQL Server: pyodbc >= 5.0.0
+    - PostgreSQL: psycopg2-binary >= 2.9.0
+    - IBM DB2: ibm-db >= 3.1.0
 
 Install with: pip install -r requirements.txt
 

@@ -3,7 +3,8 @@
 Agent Generator
 ================================================================================
 
-Generates an Azure-deployable agent for a specific Oracle table.
+Generates an Azure-deployable agent for a specific database table.
+Supports Oracle, SQL Server, PostgreSQL, and IBM DB2 databases.
 This script creates all necessary files for a standalone Azure Function app
 that provides natural language querying capabilities for a specific table.
 
@@ -23,18 +24,28 @@ See LICENSE file in project root for full license text.
 ================================================================================
 
 USAGE:
-    python agent_generator.py --config oracle_config.ini --schema HR --table EMPLOYEES --output ./agents/HR_EMPLOYEES
+    # Oracle table
+    python agent_generator.py --config databases/oracle/oracle_config.ini --schema HR --table EMPLOYEES --output ./agents/HR_EMPLOYEES --db-type oracle
+
+    # SQL Server table
+    python agent_generator.py --config databases/mssql/mssql_config.ini --schema dbo --table ORDERS --output ./agents/DBO_ORDERS --db-type mssql
+
+    # PostgreSQL table
+    python agent_generator.py --config databases/postgres/postgres_config.ini --schema public --table customers --output ./agents/PUBLIC_CUSTOMERS --db-type postgres
+
+    # IBM DB2 table
+    python agent_generator.py --config databases/ibmdb2/ibmdb2_config.ini --schema DB2INST1 --table PRODUCTS --output ./agents/DB2INST1_PRODUCTS --db-type db2
 
 GENERATED FILES:
-    - function_app.py      Azure Function endpoints
-    - table_agent.py       Table-specific agent implementation
-    - oracle_connector.py  Database connector (copied from main project)
-    - requirements.txt     Python dependencies
-    - host.json            Azure Functions configuration
-    - local.settings.json  Local development settings
-    - deploy.sh            Deployment script
-    - infra/main.bicep     Infrastructure as code
-    - README.md            Agent documentation
+    - function_app.py       Azure Function endpoints
+    - table_agent.py        Table-specific agent implementation
+    - <db>_connector.py     Database connector (copied from main project)
+    - requirements.txt      Python dependencies
+    - host.json             Azure Functions configuration
+    - local.settings.json   Local development settings
+    - deploy.sh             Deployment script
+    - infra/main.bicep      Infrastructure as code
+    - README.md             Agent documentation
 """
 
 import argparse
@@ -608,7 +619,7 @@ When you have the final answer, just respond normally with text."""
     
     def get_table_info(self) -> Dict[str, Any]:
         """Get table structure and description."""
-        structure = self.oracle.get_table_structure(self.TABLE_NAME, self.SCHEMA)
+        structure = self.db.get_table_structure(self.TABLE_NAME, self.SCHEMA)
         
         return {{
             "schema": self.SCHEMA,
@@ -624,7 +635,7 @@ When you have the final answer, just respond normally with text."""
     
     def close(self) -> None:
         """Close database connection."""
-        self.oracle.disconnect()
+        self.db.disconnect()
     
     def __enter__(self):
         return self

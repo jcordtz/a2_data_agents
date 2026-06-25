@@ -1,12 +1,19 @@
 # Multi-Database Data Agents
 
-**AI-powered natural language querying for Oracle, SQL Server, PostgreSQL, and IBM DB2 databases, deployed as Azure Functions with MCP orchestration.**
+**AI-powered natural language querying for Oracle, SQL Server, PostgreSQL, and IBM DB2 databases, deployed as Azure Functions with MCP orchestration.
+**
 
 An intelligent system that enables natural language querying of databases using Azure OpenAI. Supports **Oracle**, **Microsoft SQL Server**, **PostgreSQL**, and **IBM DB2 LUW**. Generate table-specific agents automatically, deploy them to Azure, and orchestrate them through a Model Context Protocol (MCP) server.
 
-> **⚠️ Disclaimer**: This code was generated with AI assistance (AI-generated code). It is provided "AS-IS" under the MIT License without warranty of any kind. Users should review and test thoroughly before production use, validate security implications for their specific use case, and ensure compliance with their organization's policies. See the [LICENSE](LICENSE) file for full license text.
+## Background
 
----
+The idea behind this approach to "surface" tables come from a discussion I had with an NGO. They handle crisis in different parts of the world and no two crisis are the same, so an approach where "we do the same as last time" is really not possible. 
+
+This of course provides a challenge to "ERP-system" approach. 
+
+So this approach reflects that all the "basic" information will be present in (different) ERP systems -like vendors, items, personal etc. If we then let the important tables surface them self on a by one in through individual agents. 
+
+And these invidual agents use the documentation stored with the tables (comments on the table and associated columns, which then need to be present ::smile::) as well as information about how the table can combined with other tables (references) then an overall "chatbot" could be used to ask and combine the required tables to accomplish the "real" task in question.
 
 ## Features
 
@@ -691,14 +698,6 @@ az deployment group create \
 
 ---
 
-## License
-
-MIT License - Copyright (c) 2026
-
-This software is provided "AS-IS" without warranty of any kind. See [LICENSE](LICENSE) for full details.
-
----
-
 ## Contributing
 
 1. Fork the repository
@@ -706,10 +705,7 @@ This software is provided "AS-IS" without warranty of any kind. See [LICENSE](LI
 3. Make your changes with tests
 4. Submit a pull request
 
-Please ensure all code includes appropriate documentation headers with the AI-generated disclaimer.
-| `agents/agent_generator.py` | Generates table-specific agents |
-| `agent_config.ini` | Configuration template |
-| `infra/main.bicep` | Azure infrastructure as code |
+Please ensure all code includes appropriate documentation headers.
 
 ## Quick Start
 
@@ -916,9 +912,9 @@ system_prompt = You are a helpful data analyst assistant.
 - **Terraform**: Use `sensitive = true` for credential variables; store state securely (Azure Storage with encryption)
 - **State Files**: Never commit Terraform state files; use remote backends with encryption
 
-## License
+## License and Disclaimer
 
-MIT License
+### MIT License
 
 Copyright (c) 2026
 
@@ -932,7 +928,9 @@ furnished to do so, subject to the following conditions:
 The above copyright notice and this permission notice shall be included in all
 copies or substantial portions of the Software.
 
-## Disclaimer
+### Disclaimer
+
+> **⚠️ AI-Generated Code Notice**: This code was generated with AI assistance. Users should review and test thoroughly before production use, validate security implications for their specific use case, and ensure compliance with their organization's policies.
 
 THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
 IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
@@ -941,3 +939,5 @@ AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
 LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
+
+See the [LICENSE](LICENSE) file for full license text.

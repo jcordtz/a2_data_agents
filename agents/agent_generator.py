@@ -42,12 +42,50 @@ import os
 import shutil
 import sys
 from pathlib import Path
-from typing import Optional
+from typing import Optional, Dict, Any
 
 # Add parent directory to path for imports
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from databases.oracle import OracleConnector
+# Database connector mapping
+DATABASE_CONNECTORS = {
+    "oracle": ("databases.oracle", "OracleConnector"),
+    "mssql": ("databases.mssql", "MSSQLConnector"),
+    "postgres": ("databases.postgres", "PostgresConnector"),
+    "db2": ("databases.ibmdb2", "IBMDB2Connector"),
+}
+
+# SQL syntax mapping per database type
+DATABASE_SQL_SYNTAX = {
+    "oracle": "Oracle SQL",
+    "mssql": "T-SQL (Microsoft SQL Server)",
+    "postgres": "PostgreSQL",
+    "db2": "IBM DB2 SQL",
+}
+
+
+def get_database_connector(db_type: str, config_path: str):
+    """
+    Get the appropriate database connector for the specified database type.
+    
+    Args:
+        db_type: Database type (oracle, mssql, postgres, db2)
+        config_path: Path to database config.ini
+        
+    Returns:
+        Database connector instance
+    """
+    if db_type not in DATABASE_CONNECTORS:
+        raise ValueError(f"Unsupported database type: {db_type}. Supported: {list(DATABASE_CONNECTORS.keys())}")
+    
+    module_name, class_name = DATABASE_CONNECTORS[db_type]
+    
+    # Dynamic import
+    import importlib
+    module = importlib.import_module(module_name)
+    connector_class = getattr(module, class_name)
+    
+    return connector_class(config_path)
 
 
 def generate_agent(
@@ -83,17 +121,21 @@ def generate_agent(
         output_path = Path(output_dir)
         output_path.mkdir(parents=True, exist_ok=True)
         
-        # Connect to Oracle and get table information
-        print(f"Connecting to Oracle to retrieve table metadata...")
-        with OracleConnector(config_path) as oracle:
+        # Default to oracle if not specified (for backward compatibility)
+        effective_db_type = db_type.lower() if db_type else "oracle"
+        
+        # Connect to database and get table information
+        print(f"Connecting to {effective_db_type} database to retrieve table metadata...")
+        connector = get_database_connector(effective_db_type, config_path)
+        with connector:
             # Get table description
-            table_description = oracle.get_table_description(table_name, schema)
+            table_description = connector.get_table_description(table_name, schema)
             
             # Get table structure for schema info
-            table_structure = oracle.get_table_structure(table_name, schema)
+            table_structure = connector.get_table_structure(table_name, schema)
             
             # Get foreign keys
-            foreign_keys = oracle.get_foreign_keys(table_name, schema)
+            foreign_keys = connector.get_foreign_keys(table_name, schema)
             
             # Get column list
             columns = []
@@ -103,6 +145,38 @@ def generate_agent(
         
         print(f"Retrieved metadata for {schema}.{table_name}")
         
+        # Combine with Purview description if available
+        combined_description = table_description
+        if purview.lower() == "yes":
+            print(f"Looking up Purview description for {schema}.{table_name}...")
+            if not all([db_type, host, service_name, port]):
+                print(f"[WARNING] Purview lookup requires db_type, host, port, and service_name. Using database description only.")
+            else:
+                try:
+                    from purview.purview_handler import lookup_asset_description
+                    purview_description = lookup_asset_description(
+                        db_type=db_type,
+                        host=host,
+                        port=port,
+                        service_name=service_name,
+                        schema=schema,
+                        table_name=table_name
+                    )
+                    if purview_description and purview_description != "N/A":
+                        print(f"Purview description found, combining with database description")
+                        # Combine database description with Purview description
+                        purview_intro = "Additional information was found in Microsoft Purview Data Governance:"
+                        if combined_description:
+                            combined_description = f"{combined_description}\n\n{purview_intro}\n{purview_description}"
+                        else:
+                            combined_description = f"{purview_intro}\n{purview_description}"
+                    else:
+                        print(f"Purview: No description found for {schema}.{table_name}")
+                except ImportError as e:
+                    print(f"[WARNING] Purview module not found. Using database description only: {e}")
+                except Exception as e:
+                    print(f"[WARNING] Purview lookup failed. Using database description only: {e}")
+        
         # Generate files
         agent_name = f"{schema}_{table_name}".lower()
         full_table_name = f"{schema}.{table_name}"
@@ -110,18 +184,14 @@ def generate_agent(
         # 1. Generate function_app.py
         generate_function_app(output_path, agent_name, full_table_name)
         
-        # 2. Generate table_agent.py
-        generate_table_agent(output_path, schema, table_name, table_description, columns)
+        # 2. Generate table_agent.py (with combined description and db_type)
+        generate_table_agent(output_path, schema, table_name, combined_description, columns, effective_db_type)
         
-        # 3. Copy oracle_connector.py from databases/oracle directory
-        source_connector = Path(__file__).parent.parent / "databases" / "oracle" / "oracle_connector.py"
-        if source_connector.exists():
-            shutil.copy(source_connector, output_path / "oracle_connector.py")
-        else:
-            generate_oracle_connector_stub(output_path)
+        # 3. Copy the appropriate database connector
+        copy_database_connector(output_path, effective_db_type)
         
-        # 4. Generate requirements.txt
-        generate_requirements(output_path)
+        # 4. Generate requirements.txt (with db-specific dependencies)
+        generate_requirements(output_path, effective_db_type)
         
         # 5. Generate host.json
         generate_host_json(output_path)
@@ -138,38 +208,11 @@ def generate_agent(
         generate_bicep(infra_path, agent_name)
         generate_bicep_params(infra_path)
         
-        # 9. Generate README.md
-        generate_readme(output_path, schema, table_name, table_description, columns)
+        # 9. Generate README.md (with combined description)
+        generate_readme(output_path, schema, table_name, combined_description, columns)
         
         # 10. Generate agent config
         generate_agent_config(output_path, config_path, schema, table_name)
-        
-        # 11. Handle Purview lookup if enabled
-        if purview.lower() == "yes":
-            print(f"Purview lookup enabled for {schema}.{table_name}")
-            # Validate required parameters for Purview
-            if not all([db_type, host, service_name, port]):
-                print(f"[WARNING] Purview lookup requires db_type, host, port, and service_name. Skipping...")
-            else:
-                try:
-                    # Import and call the purview handler
-                    from purview.purview_handler import lookup_asset_description
-                    description = lookup_asset_description(
-                        db_type=db_type,
-                        host=host,
-                        port=port,
-                        service_name=service_name,
-                        schema=schema,
-                        table_name=table_name
-                    )
-                    if description != "N/A":
-                        print(f"Purview description found: {description}")
-                    else:
-                        print(f"Purview: No description found for {schema}.{table_name}")
-                except ImportError as e:
-                    print(f"[WARNING] Purview module not found. Skipping Purview lookup: {e}")
-                except Exception as e:
-                    print(f"[WARNING] Purview lookup failed: {e}")
         
         print(f"Agent generated successfully in: {output_dir}")
         return True
@@ -332,10 +375,20 @@ def generate_table_agent(
     schema: str,
     table_name: str,
     table_description: str,
-    columns: list
+    columns: list,
+    db_type: str = "oracle"
 ):
-    """Generate the table-specific agent."""
+    """Generate the table-specific agent for any supported database type."""
     column_list = ", ".join(columns) if columns else "all columns"
+    
+    # Get SQL syntax for this database type
+    sql_syntax = DATABASE_SQL_SYNTAX.get(db_type, "SQL")
+    
+    # Get connector import info
+    connector_info = DATABASE_CONNECTORS.get(db_type, ("databases.oracle", "OracleConnector"))
+    connector_class = connector_info[1]
+    connector_file = f"{db_type}_connector.py" if db_type != "db2" else "ibmdb2_connector.py"
+    config_section = db_type if db_type != "db2" else "ibmdb2"
     
     content = f'''"""
 Table Agent for {schema}.{table_name}
@@ -344,6 +397,8 @@ Table Agent for {schema}.{table_name}
 An AI-powered agent specialized for querying the {schema}.{table_name} table.
 This agent understands the table structure and can answer natural language
 questions about the data.
+
+DATABASE TYPE: {db_type.upper()}
 
 TABLE DESCRIPTION:
 {table_description}
@@ -362,7 +417,7 @@ from typing import Any, Dict, List, Optional
 import pandas as pd
 from openai import AzureOpenAI
 
-from oracle_connector import OracleConnector
+from {connector_file.replace('.py', '')} import {connector_class}
 
 
 @dataclass
@@ -377,12 +432,15 @@ class AgentResponse:
 class TableAgent:
     """
     AI Agent specialized for the {schema}.{table_name} table.
+    Database Type: {db_type.upper()}
     """
     
     # Table metadata (embedded at generation time)
     SCHEMA = "{schema}"
     TABLE_NAME = "{table_name}"
     FULL_TABLE_NAME = "{schema}.{table_name}"
+    DATABASE_TYPE = "{db_type}"
+    SQL_SYNTAX = "{sql_syntax}"
     TABLE_DESCRIPTION = """{table_description}"""
     COLUMNS = {json.dumps(columns)}
     
@@ -390,8 +448,8 @@ class TableAgent:
         """Initialize the table agent."""
         self.config_path = Path(config_path)
         self.config = self._load_config()
-        self.oracle = OracleConnector(config_path)
-        self.oracle.connect()
+        self.db = {connector_class}(config_path)
+        self.db.connect()
         
         # Initialize Azure OpenAI client
         self.client = AzureOpenAI(
@@ -417,8 +475,8 @@ class TableAgent:
             
             if "azure_openai" in parser.sections():
                 config.update(dict(parser["azure_openai"]))
-            if "oracle" in parser.sections():
-                config.update(dict(parser["oracle"]))
+            if "{config_section}" in parser.sections():
+                config.update(dict(parser["{config_section}"]))
             if "agent" in parser.sections():
                 config.update(dict(parser["agent"]))
         
@@ -427,6 +485,8 @@ class TableAgent:
     def _build_system_prompt(self) -> str:
         """Build the system prompt with table context."""
         return f"""You are an AI data analyst assistant specialized in querying the {{self.FULL_TABLE_NAME}} table.
+
+DATABASE TYPE: {{self.DATABASE_TYPE.upper()}}
 
 TABLE INFORMATION:
 {{self.TABLE_DESCRIPTION}}
@@ -439,7 +499,7 @@ YOUR CAPABILITIES:
 
 RULES:
 1. Only query the {{self.FULL_TABLE_NAME}} table and its related tables via joins
-2. Always use proper Oracle SQL syntax
+2. Always use proper {{self.SQL_SYNTAX}} syntax
 3. Limit results to 100 rows unless specifically asked for more
 4. Be concise but informative in your responses
 5. If you cannot answer a question with the available data, explain why
@@ -511,7 +571,7 @@ When you have the final answer, just respond normally with text."""
                 return AgentResponse(answer=response)
             
             # Execute SQL
-            df = self.oracle.query_to_dataframe(sql)
+            df = self.db.query_to_dataframe(sql)
             
             # Generate summary
             summary = self._summarize_results(df, sql)
@@ -576,16 +636,50 @@ When you have the final answer, just respond normally with text."""
     (output_path / "table_agent.py").write_text(content)
 
 
-def generate_requirements(output_path: Path):
-    """Generate requirements.txt."""
-    content = """# Azure Functions
+def copy_database_connector(output_path: Path, db_type: str):
+    """Copy the appropriate database connector to the output directory."""
+    # Mapping of db_type to connector file info
+    connector_files = {
+        "oracle": ("oracle", "oracle_connector.py"),
+        "mssql": ("mssql", "mssql_connector.py"),
+        "postgres": ("postgres", "postgres_connector.py"),
+        "db2": ("ibmdb2", "ibmdb2_connector.py"),
+    }
+    
+    if db_type not in connector_files:
+        print(f"[WARNING] Unknown database type: {db_type}. Skipping connector copy.")
+        return
+    
+    subdir, filename = connector_files[db_type]
+    source_connector = Path(__file__).parent.parent / "databases" / subdir / filename
+    
+    if source_connector.exists():
+        shutil.copy(source_connector, output_path / filename)
+        print(f"Copied {filename} to output directory")
+    else:
+        print(f"[WARNING] Database connector not found: {source_connector}")
+
+
+def generate_requirements(output_path: Path, db_type: str = "oracle"):
+    """Generate requirements.txt with database-specific dependencies."""
+    
+    # Database-specific dependencies
+    db_dependencies = {
+        "oracle": "# Oracle Database\noracledb>=2.0.0",
+        "mssql": "# Microsoft SQL Server\npyodbc>=5.0.0",
+        "postgres": "# PostgreSQL\npsycopg2-binary>=2.9.0",
+        "db2": "# IBM DB2\nibm-db>=3.1.0",
+    }
+    
+    db_dep = db_dependencies.get(db_type, db_dependencies["oracle"])
+    
+    content = f"""# Azure Functions
 azure-functions>=1.17.0
 
 # Azure OpenAI
 openai>=1.12.0
 
-# Oracle Database
-oracledb>=2.0.0
+{db_dep}
 sqlalchemy>=2.0.0
 
 # Data Processing

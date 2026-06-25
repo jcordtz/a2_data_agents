@@ -3,8 +3,14 @@ Azure AI Data Agent
 ================================================================================
 
 An intelligent AI agent powered by Azure OpenAI that enables natural language
-querying of Oracle databases. The agent interprets user questions, generates
-appropriate SQL queries, and returns results as pandas DataFrames.
+querying of multiple database types. The agent interprets user questions, 
+generates appropriate SQL queries, and returns results as pandas DataFrames.
+
+SUPPORTED DATABASES:
+    - Oracle (via oracledb)
+    - Microsoft SQL Server (via pyodbc)
+    - PostgreSQL (via psycopg2)
+    - IBM DB2 LUW (via ibm_db)
 
 ================================================================================
 DISCLAIMER
@@ -25,6 +31,7 @@ FUNCTIONALITY
 -------------
 This module provides:
     - Natural language to SQL translation using Azure OpenAI
+    - Multi-database support (Oracle, SQL Server, PostgreSQL, IBM DB2)
     - Automatic table discovery and schema understanding
     - Multi-language support with automatic translation (30+ languages)
     - Table capability descriptions in business-friendly language
@@ -37,24 +44,24 @@ Basic usage with context manager:
 
     from data_agent import DataAgent
 
-    with DataAgent("agent_config.ini") as agent:
-        # Ask questions in natural language
+    # For Oracle database
+    with DataAgent("oracle_config.ini", db_type="oracle") as agent:
         response = agent.ask("What tables are available?")
         print(response.answer)
-        
-        # Query data
+    
+    # For SQL Server
+    with DataAgent("mssql_config.ini", db_type="mssql") as agent:
         response = agent.ask("Show me the top 10 employees by salary")
         print(response.answer)
-        if response.data is not None:
-            print(response.data)
-        
-        # Get table descriptions in configured language
-        description = agent.describe_table_capabilities("EMPLOYEES")
-        print(description.description)
+    
+    # For PostgreSQL
+    with DataAgent("postgres_config.ini", db_type="postgres") as agent:
+        response = agent.ask("How many records are in the orders table?")
+        print(response.answer)
 
 Manual connection management:
 
-    agent = DataAgent("agent_config.ini")
+    agent = DataAgent("agent_config.ini", db_type="oracle")
     
     response = agent.ask("How many records are in the ORDERS table?")
     print(response.answer)
@@ -72,6 +79,7 @@ CONFIGURATION FILE FORMAT (agent_config.ini)
     api_version = 2024-02-15-preview
     deployment_name = gpt-4o
 
+    # For Oracle:
     [oracle]
     host = your-oracle-host
     port = 1521
@@ -79,7 +87,34 @@ CONFIGURATION FILE FORMAT (agent_config.ini)
     username = your_username
     password = your_password
     schema = your_schema
-    country = DK  # Language for responses (DK=Danish, US=English, etc.)
+    country = DK  # Language for responses
+
+    # For SQL Server:
+    [mssql]
+    host = your-sql-server
+    port = 1433
+    database = your_database
+    username = your_username
+    password = your_password
+    country = US
+
+    # For PostgreSQL:
+    [postgres]
+    host = your-postgres-host
+    port = 5432
+    database = your_database
+    username = your_username
+    password = your_password
+    country = US
+
+    # For IBM DB2:
+    [ibmdb2]
+    host = your-db2-host
+    port = 50000
+    database = your_database
+    username = your_username
+    password = your_password
+    country = US
 
     [agent]
     max_iterations = 10
@@ -97,9 +132,12 @@ DEPENDENCIES
 ------------
     - openai >= 1.12.0
     - pandas >= 2.0.0
-    - oracledb >= 2.0.0
+    - For Oracle: oracledb >= 2.0.0
+    - For SQL Server: pyodbc >= 5.0.0
+    - For PostgreSQL: psycopg2-binary >= 2.9.0
+    - For IBM DB2: ibm-db >= 3.1.0
 
-Install with: pip install openai pandas oracledb
+Install with: pip install openai pandas <database-driver>
 
 LICENSE
 -------
@@ -130,6 +168,7 @@ SOFTWARE.
 
 import json
 import configparser
+import importlib
 from pathlib import Path
 from typing import Optional, Dict, Any, List, Callable
 from dataclasses import dataclass, field
@@ -141,7 +180,46 @@ import sys
 from pathlib import Path
 # Add parent directory to path for imports
 sys.path.insert(0, str(Path(__file__).parent.parent))
-from databases.oracle import OracleConnector
+
+
+# Database connector mapping
+DATABASE_CONNECTORS = {
+    "oracle": ("databases.oracle", "OracleConnector"),
+    "mssql": ("databases.mssql", "MSSQLConnector"),
+    "postgres": ("databases.postgres", "PostgresConnector"),
+    "db2": ("databases.ibmdb2", "IBMDB2Connector"),
+}
+
+# SQL syntax mapping per database type
+DATABASE_SQL_SYNTAX = {
+    "oracle": "Oracle SQL",
+    "mssql": "T-SQL (Microsoft SQL Server)",
+    "postgres": "PostgreSQL",
+    "db2": "IBM DB2 SQL",
+}
+
+
+def get_database_connector(db_type: str, config_path: str):
+    """
+    Get the appropriate database connector for the specified database type.
+    
+    Args:
+        db_type: Database type (oracle, mssql, postgres, db2)
+        config_path: Path to database config.ini
+        
+    Returns:
+        Database connector instance
+    """
+    if db_type not in DATABASE_CONNECTORS:
+        raise ValueError(f"Unsupported database type: {db_type}. Supported: {list(DATABASE_CONNECTORS.keys())}")
+    
+    module_name, class_name = DATABASE_CONNECTORS[db_type]
+    
+    # Dynamic import
+    module = importlib.import_module(module_name)
+    connector_class = getattr(module, class_name)
+    
+    return connector_class(config_path)
 
 
 # Country code to language mapping for natural language descriptions
@@ -207,21 +285,28 @@ class TableDescription:
 
 class DataAgent:
     """
-    AI Agent that can query Oracle databases using natural language.
+    AI Agent that can query multiple database types using natural language.
     Uses Azure OpenAI for understanding queries and generating SQL.
+    
+    Supported databases: Oracle, SQL Server, PostgreSQL, IBM DB2
     """
 
-    def __init__(self, config_path: str = "agent_config.ini"):
+    def __init__(self, config_path: str = "agent_config.ini", db_type: str = "oracle"):
         """
         Initialize the data agent.
 
         Args:
             config_path: Path to the configuration file
+            db_type: Database type (oracle, mssql, postgres, db2)
         """
+        self.db_type = db_type.lower()
+        self.sql_syntax = DATABASE_SQL_SYNTAX.get(self.db_type, "SQL")
         self.config = self._load_config(config_path)
         self.client = self._init_openai_client()
-        self.oracle = OracleConnector(config_path)
-        self.oracle.connect()
+        
+        # Initialize the appropriate database connector
+        self.db = get_database_connector(self.db_type, config_path)
+        self.db.connect()
         
         # Define available tools/functions
         self.tools = self._define_tools()
@@ -239,12 +324,20 @@ class DataAgent:
 
         parser = configparser.ConfigParser()
         parser.read(path)
+        
+        # Get database section name based on db_type
+        db_section = self.db_type if self.db_type != "db2" else "ibmdb2"
 
         config = {
             "azure_openai": dict(parser["azure_openai"]),
-            "oracle": dict(parser["oracle"]),
-            "agent": dict(parser["agent"]),
+            "database": dict(parser[db_section]) if db_section in parser.sections() else {},
+            "agent": dict(parser["agent"]) if "agent" in parser.sections() else {},
         }
+        
+        # For backward compatibility, also store as "oracle" key if that's the db type
+        if self.db_type == "oracle" and "oracle" in parser.sections():
+            config["oracle"] = dict(parser["oracle"])
+        
         return config
 
     def _init_openai_client(self) -> AzureOpenAI:
@@ -258,7 +351,7 @@ class DataAgent:
 
     def _get_target_language(self) -> Dict[str, str]:
         """Get the target language based on country code from config."""
-        country_code = self.config["oracle"].get("country", "US").upper()
+        country_code = self.config.get("database", {}).get("country", "US").upper()
         return COUNTRY_LANGUAGE_MAP.get(
             country_code, 
             {"language": "English", "locale": "en-US"}
@@ -321,9 +414,9 @@ class DataAgent:
             TableDescription with detailed information
         """
         # Get table metadata
-        structure = self.oracle.get_table_structure(table_name, schema)
-        comments = self.oracle.get_table_comments(table_name, schema)
-        constraints = self.oracle.get_table_constraints(table_name, schema)
+        structure = self.db.get_table_structure(table_name, schema)
+        comments = self.db.get_table_comments(table_name, schema)
+        constraints = self.db.get_table_constraints(table_name, schema)
 
         # Build context for AI description generation
         table_comment = comments.get("table_comment", "No description available")
@@ -360,7 +453,7 @@ class DataAgent:
 
         # Generate description using Azure OpenAI
         prompt = f"""
-Analyze this Oracle database table and provide a clear, natural language description of:
+Analyze this {self.db_type.upper()} database table and provide a clear, natural language description of:
 1. What this table stores and its purpose
 2. What capabilities/queries it enables
 3. How it might relate to other data
@@ -417,7 +510,7 @@ Include specific examples of questions that could be answered using this table.
             capabilities=capabilities,
             column_descriptions=column_descriptions,
             language=lang_info["language"],
-            country_code=self.config["oracle"].get("country", "US").upper()
+            country_code=self.config.get("database", {}).get("country", "US").upper()
         )
 
     def _extract_capabilities(
@@ -464,7 +557,7 @@ Include specific examples of questions that could be answered using this table.
         """Initialize the system prompt with database context."""
         # Get available tables for context
         try:
-            tables_df = self.oracle.list_tables()
+            tables_df = self.db.list_tables()
             tables_list = tables_df["TABLE_NAME"].tolist() if not tables_df.empty else []
             tables_context = f"Available tables: {', '.join(tables_list)}" if tables_list else "No tables found."
         except Exception:
@@ -473,7 +566,10 @@ Include specific examples of questions that could be answered using this table.
         system_prompt = f"""
 {self.config['agent'].get('system_prompt', 'You are a helpful data analyst assistant.')}
 
-You have access to an Oracle database with the following context:
+DATABASE TYPE: {self.db_type.upper()}
+SQL SYNTAX: {self.sql_syntax}
+
+You have access to a {self.db_type.upper()} database with the following context:
 {tables_context}
 
 You can use the available tools to:
@@ -485,11 +581,11 @@ You can use the available tools to:
 When the user asks a question about data:
 1. First understand what tables and columns are relevant
 2. Use get_table_structure to understand the schema
-3. Write and execute appropriate SQL queries
+3. Write and execute appropriate SQL queries using {self.sql_syntax} syntax
 4. Explain the results clearly
 
 Always validate your SQL before executing. Use parameterized queries when possible.
-For large result sets, consider using LIMIT/FETCH FIRST clauses.
+For large result sets, consider using LIMIT/FETCH FIRST clauses appropriate for {self.db_type.upper()}.
 """
         self.messages = [{"role": "system", "content": system_prompt}]
 
@@ -715,7 +811,7 @@ For large result sets, consider using LIMIT/FETCH FIRST clauses.
     def _tool_list_tables(self, schema: Optional[str] = None) -> str:
         """Tool: List all tables."""
         try:
-            df = self.oracle.list_tables(schema)
+            df = self.db.list_tables(schema)
             if df.empty:
                 return "No tables found in the schema."
             return df.to_string()
@@ -727,7 +823,7 @@ For large result sets, consider using LIMIT/FETCH FIRST clauses.
     ) -> str:
         """Tool: Get table structure."""
         try:
-            df = self.oracle.get_table_structure(table_name, schema)
+            df = self.db.get_table_structure(table_name, schema)
             if df.empty:
                 return f"Table '{table_name}' not found or has no columns."
             return df.to_string()
@@ -742,7 +838,7 @@ For large result sets, consider using LIMIT/FETCH FIRST clauses.
             return "Error: Only SELECT queries are allowed for safety. Use SELECT or WITH clauses."
 
         try:
-            df = self.oracle.query_to_dataframe(query)
+            df = self.db.query_to_dataframe(query)
             self._last_result_df = df  # Store for potential further analysis
             
             if df.empty:
@@ -764,7 +860,7 @@ For large result sets, consider using LIMIT/FETCH FIRST clauses.
     ) -> str:
         """Tool: Get data from a table."""
         try:
-            df = self.oracle.table_to_dataframe(
+            df = self.db.table_to_dataframe(
                 table_name, columns=columns, where_clause=where_clause, limit=limit or 100
             )
             self._last_result_df = df
@@ -778,7 +874,7 @@ For large result sets, consider using LIMIT/FETCH FIRST clauses.
     def _tool_get_table_constraints(self, table_name: str) -> str:
         """Tool: Get table constraints."""
         try:
-            df = self.oracle.get_table_constraints(table_name)
+            df = self.db.get_table_constraints(table_name)
             if df.empty:
                 return f"No constraints found for table '{table_name}'."
             return df.to_string()
@@ -828,7 +924,7 @@ This table enables you to:
     ) -> str:
         """Tool: Get table and column comments from Oracle."""
         try:
-            comments = self.oracle.get_table_comments(table_name, schema)
+            comments = self.db.get_table_comments(table_name, schema)
             
             result = f"Table: {table_name}\n"
             result += f"Table Comment: {comments['table_comment'] or 'No comment defined'}\n\n"
@@ -857,7 +953,7 @@ This table enables you to:
     ) -> str:
         """Tool: Analyze data from a query."""
         try:
-            df = self.oracle.query_to_dataframe(query)
+            df = self.db.query_to_dataframe(query)
             
             if df.empty:
                 return "No data to analyze."
@@ -973,7 +1069,7 @@ This table enables you to:
 
     def close(self) -> None:
         """Clean up resources."""
-        self.oracle.disconnect()
+        self.db.disconnect()
 
     def __enter__(self) -> "DataAgent":
         """Context manager entry."""

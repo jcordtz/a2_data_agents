@@ -362,10 +362,13 @@ python agents/agent_generator.py \
   --output ./generated_agents/hr_employees \
   --purview yes \
   --host db.example.com \
-  --db-type oracle
+  --port 1521 \
+  --db-type oracle \
+  --service-name ORCL
 
 # Generate multiple agents from CSV
-# CSV format: database_type,host,schema,table_name,purview
+# CSV format: database_type,host,port,service_name,schema,table_name,purview
+# All columns are required
 ./generate_agents.sh sample_tables.csv --output ./generated_agents
 
 # The config file is automatically selected based on database_type:
@@ -477,7 +480,7 @@ az deployment group create \
 | **Data Agent** | Azure OpenAI-powered agent for natural language to SQL translation | See docstrings in [agents/data_agent.py](agents/data_agent.py) |
 | **Function App** | Azure Function HTTP endpoints for the data agent | See docstrings in [agents/function_app.py](agents/function_app.py) |
 | **Agent Generator** | Generates standalone Azure Function agents for specific tables | See docstrings in [agents/agent_generator.py](agents/agent_generator.py) |
-| **Purview Handler** | Microsoft Purview Data Governance integration for asset management and metadata | See docstrings in [purview/purview_handler.py](purview/purview_handler.py) |
+| **Purview Handler** | Microsoft Purview Data Governance integration for asset description lookup | See docstrings in [purview/purview_handler.py](purview/purview_handler.py) |
 | **MCP Server** | FastAPI-based Model Context Protocol server | See [mcp/README.md](mcp/README.md) |
 | **Chatbot Interface** | React-based web UI for querying data through MCP server | See [chatbot/README.md](chatbot/README.md) |
 
@@ -551,21 +554,10 @@ service_name = ORCL
 
 ```ini
 [purview]
-account_name = your-purview-account   # Microsoft Purview account name
-endpoint =                             # Optional: explicit endpoint URL
-tenant_id = your-tenant-id             # Azure AD tenant ID
-client_id = your-client-id             # Service principal client ID
-client_secret = your-client-secret     # Service principal client secret
-auth_method = service_principal        # Auth: service_principal or default_credential
-
-[database]
-server_host =                          # Default database host (can override per-agent)
-server_port =                          # Default database port
-
-[options]
-auto_create_assets = true              # Auto-create assets if not found
-add_classifications = true             # Add classifications to assets
-default_classifications =              # Comma-separated default classifications
+account_name = your-purview-account   # Microsoft Purview account name (required)
+tenant_id = your-tenant-id             # Azure AD tenant ID (required)
+client_id = your-client-id             # Service principal client ID (required)
+client_secret = your-client-secret     # Service principal client secret (required)
 ```
 
 ### MCP Server Environment Variables

@@ -4,8 +4,8 @@ MCP Server for Data Agents
 ================================================================================
 
 A Model Context Protocol (MCP) server that hosts multiple table-specific data
-agents, allowing AI models to query Oracle databases through a standardized
-protocol.
+agents, allowing AI models to query databases (Oracle, SQL Server, PostgreSQL,
+IBM DB2) through a standardized protocol.
 
 ================================================================================
 DISCLAIMER
@@ -114,6 +114,9 @@ class AgentInfo:
     schema_name: str
     endpoint: str
     api_key: str
+    database_type: str = "oracle"  # oracle, mssql, postgres, db2
+    host: str = ""  # Database server hostname
+    purview: str = "no"  # yes/no - Purview integration enabled
     description: str = ""
     registered_at: str = field(default_factory=lambda: datetime.utcnow().isoformat())
     last_used: Optional[str] = None
@@ -143,6 +146,9 @@ class RegisterAgentRequest(BaseModel):
     schema_name: str
     endpoint: str
     api_key: str
+    database_type: str = "oracle"  # oracle, mssql, postgres, db2
+    host: str = ""  # Database server hostname
+    purview: str = "no"  # yes/no - Purview integration enabled
     description: str = ""
 
 
@@ -236,7 +242,7 @@ class AgentRegistry:
 # Initialize FastAPI app
 app = FastAPI(
     title="Data Agent MCP Server",
-    description="Model Context Protocol server for Oracle data agents",
+    description="Model Context Protocol server for multi-database data agents (Oracle, SQL Server, PostgreSQL, IBM DB2)",
     version="1.0.0"
 )
 
@@ -374,12 +380,12 @@ async def list_resources(authorized: bool = Depends(verify_auth)) -> Dict[str, A
         resources.append(MCPResource(
             uri=f"agents://{agent.agent_id}/info",
             name=f"{agent.agent_id} Info",
-            description=f"Information about {agent.schema_name}.{agent.table_name}"
+            description=f"Information about [{agent.database_type}] {agent.host}/{agent.schema_name}.{agent.table_name}"
         ))
         resources.append(MCPResource(
             uri=f"agents://{agent.agent_id}/schema",
             name=f"{agent.agent_id} Schema",
-            description=f"Schema for {agent.schema_name}.{agent.table_name}"
+            description=f"Schema for [{agent.database_type}] {agent.schema_name}.{agent.table_name}"
         ))
     
     return {"resources": [r.dict() for r in resources]}
@@ -395,7 +401,10 @@ async def read_resource(
         agents = [
             {
                 "agent_id": a.agent_id,
+                "database_type": a.database_type,
+                "host": a.host,
                 "table": f"{a.schema_name}.{a.table_name}",
+                "purview": a.purview,
                 "description": a.description,
                 "status": a.status
             }
@@ -458,6 +467,9 @@ async def register_agent(
         schema_name=request.schema_name,
         endpoint=request.endpoint,
         api_key=request.api_key,
+        database_type=request.database_type,
+        host=request.host,
+        purview=request.purview,
         description=request.description
     )
     registry.register(agent)
@@ -577,7 +589,7 @@ async def _handle_list_agents() -> MCPToolResult:
         )
     
     agent_list = "\n".join([
-        f"- {a.agent_id}: {a.schema_name}.{a.table_name} - {a.description or 'No description'}"
+        f"- {a.agent_id}: [{a.database_type}] {a.host}/{a.schema_name}.{a.table_name} (Purview: {a.purview}) - {a.description or 'No description'}"
         for a in agents
     ])
     

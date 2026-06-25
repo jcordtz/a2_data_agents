@@ -24,9 +24,9 @@
 #   ./generate_agents.sh <csv_file> [options]
 #
 # CSV FORMAT:
-#   database_type,host,schema,table_name,purview
-#   oracle,db.example.com,HR,EMPLOYEES,yes
-#   mssql,sales-db.example.com,SALES,ORDERS,no
+#   database_type,host,port,service_name,schema,table_name,purview
+#   oracle,db.example.com,1521,ORCL,HR,EMPLOYEES,yes
+#   mssql,sql.example.com,1433,mydb,SALES,ORDERS,no
 #
 # OPTIONS:
 #   --output <dir>       Output directory for generated agents (default: ./agents)
@@ -166,7 +166,7 @@ CURRENT=0
 FAILED=0
 
 # Read CSV file (skip header)
-tail -n +2 "$CSV_FILE" | while IFS=',' read -r DB_TYPE CSV_HOST SCHEMA TABLE_NAME PURVIEW || [ -n "$SCHEMA" ]; do
+tail -n +2 "$CSV_FILE" | while IFS=',' read -r DB_TYPE CSV_HOST CSV_PORT SERVICE_NAME SCHEMA TABLE_NAME PURVIEW || [ -n "$SCHEMA" ]; do
     # Skip empty lines
     if [ -z "$SCHEMA" ] || [ -z "$TABLE_NAME" ]; then
         continue
@@ -175,6 +175,8 @@ tail -n +2 "$CSV_FILE" | while IFS=',' read -r DB_TYPE CSV_HOST SCHEMA TABLE_NAM
     # Trim whitespace
     DB_TYPE=$(echo "$DB_TYPE" | xargs)
     CSV_HOST=$(echo "$CSV_HOST" | xargs)
+    CSV_PORT=$(echo "$CSV_PORT" | xargs)
+    SERVICE_NAME=$(echo "$SERVICE_NAME" | xargs)
     SCHEMA=$(echo "$SCHEMA" | xargs)
     TABLE_NAME=$(echo "$TABLE_NAME" | xargs)
     PURVIEW=$(echo "$PURVIEW" | xargs)
@@ -185,6 +187,21 @@ tail -n +2 "$CSV_FILE" | while IFS=',' read -r DB_TYPE CSV_HOST SCHEMA TABLE_NAM
     fi
     if [ -z "$DB_TYPE" ]; then
         print_warning "Missing database type for ${SCHEMA}.${TABLE_NAME}, skipping..."
+        FAILED=$((FAILED + 1))
+        continue
+    fi
+    if [ -z "$CSV_HOST" ]; then
+        print_warning "Missing host for ${SCHEMA}.${TABLE_NAME}, skipping..."
+        FAILED=$((FAILED + 1))
+        continue
+    fi
+    if [ -z "$CSV_PORT" ]; then
+        print_warning "Missing port for ${SCHEMA}.${TABLE_NAME}, skipping..."
+        FAILED=$((FAILED + 1))
+        continue
+    fi
+    if [ -z "$SERVICE_NAME" ]; then
+        print_warning "Missing service_name for ${SCHEMA}.${TABLE_NAME}, skipping..."
         FAILED=$((FAILED + 1))
         continue
     fi
@@ -227,13 +244,16 @@ tail -n +2 "$CSV_FILE" | while IFS=',' read -r DB_TYPE CSV_HOST SCHEMA TABLE_NAM
     
 
     
-    print_info "[$CURRENT] Generating agent for ${DB_TYPE}://${SCHEMA}.${TABLE_NAME} (Host: ${CSV_HOST:-default}, Config: ${CONFIG_PATH}, Purview: ${PURVIEW})..."
+    print_info "[$CURRENT] Generating agent for ${DB_TYPE}://${SCHEMA}.${TABLE_NAME} (Host: ${CSV_HOST}:${CSV_PORT}, Service: ${SERVICE_NAME}, Config: ${CONFIG_PATH}, Purview: ${PURVIEW})..."
     
-    # Build host argument if provided
-    HOST_ARG=""
-    if [ -n "$CSV_HOST" ]; then
-        HOST_ARG="--host $CSV_HOST"
-    fi
+    # Build host argument
+    HOST_ARG="--host $CSV_HOST"
+    
+    # Build port argument
+    PORT_ARG="--port $CSV_PORT"
+    
+    # Build service name argument
+    SERVICE_ARG="--service-name $SERVICE_NAME"
     
     # Build database type argument
     DB_TYPE_ARG="--db-type $DB_TYPE"
@@ -246,6 +266,8 @@ tail -n +2 "$CSV_FILE" | while IFS=',' read -r DB_TYPE CSV_HOST SCHEMA TABLE_NAM
         --output "$AGENT_DIR" \
         --purview "$PURVIEW" \
         $HOST_ARG \
+        $PORT_ARG \
+        $SERVICE_ARG \
         $DB_TYPE_ARG; then
         print_success "Created agent: $AGENT_NAME"
     else

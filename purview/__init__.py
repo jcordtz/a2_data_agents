@@ -3,7 +3,8 @@ Purview Integration Module
 ================================================================================
 
 This module provides integration with Microsoft Purview Data Governance for
-catalog management, asset registration, and classification.
+looking up table and column asset descriptions, formatted as easy-to-read
+essay-style prose.
 
 ================================================================================
 DISCLAIMER
@@ -16,66 +17,66 @@ See LICENSE file in project root for full license text.
 ================================================================================
 
 USAGE:
-    from purview import handle_purview_integration, PurviewClient
+    from purview import lookup_asset_description
     
-    # High-level function for agent generator
-    result = handle_purview_integration("HR", "EMPLOYEES")
-    
-    # Direct client usage
-    client = PurviewClient("purview_config.ini")
-    asset = client.register_table_asset("HR", "EMPLOYEES")
-    client.close()
+    # Look up table and column descriptions in Purview
+    # All parameters are required
+    description = lookup_asset_description(
+        db_type="oracle",
+        host="db.example.com",
+        port=1521,
+        service_name="ORCL",
+        schema="HR",
+        table_name="EMPLOYEES"
+    )
+    # Returns essay-style description combining table and column info:
+    #
+    #   This table stores employee master data including personal information.
+    #
+    #   The table includes the following data elements: EMPLOYEE_ID (unique 
+    #   identifier for each employee), FIRST_NAME (employee's given name), 
+    #   and LAST_NAME (employee's family name).
     
     # Build qualified names for Purview lookups
     from purview import build_qualified_name
-    qn = build_qualified_name("oracle", "HR", "EMPLOYEES", 
-                               host="db.example.com", port=1521)
-    
-    # Parse existing qualified names
-    from purview import parse_qualified_name
-    parsed = parse_qualified_name("oracle://db.example.com:1521/ORCL/HR/EMPLOYEES")
+    qn = build_qualified_name(
+        database_type="oracle",
+        host="db.example.com",
+        port=1521,
+        service_name="ORCL",
+        schema="HR",
+        table_name="EMPLOYEES"
+    )
 
 DEPENDENCIES:
-    pip install azure-identity azure-purview-catalog azure-purview-scanning
+    pip install azure-identity azure-purview-catalog
 """
 
 from purview.purview_handler import (
-    # Main integration function
-    handle_purview_integration,
+    # Main lookup function
+    lookup_asset_description,
     
-    # Client and data classes
+    # Client and config classes
     PurviewClient,
     PurviewConfig,
-    PurviewAsset,
-    QualifiedNameParams,
     
     # Qualified name utilities
     build_qualified_name,
-    build_qualified_name_from_params,
-    parse_qualified_name,
-    get_database_type_info,
-    get_supported_database_types,
     
     # Constants
     DATABASE_TYPE_MAPPINGS
 )
 
 __all__ = [
-    # Main integration function
-    "handle_purview_integration",
+    # Main lookup function
+    "lookup_asset_description",
     
-    # Client and data classes
+    # Client and config classes
     "PurviewClient",
     "PurviewConfig",
-    "PurviewAsset",
-    "QualifiedNameParams",
     
     # Qualified name utilities
     "build_qualified_name",
-    "build_qualified_name_from_params",
-    "parse_qualified_name",
-    "get_database_type_info",
-    "get_supported_database_types",
     
     # Constants
     "DATABASE_TYPE_MAPPINGS"

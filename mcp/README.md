@@ -1,6 +1,6 @@
 # MCP Server for Data Agents
 
-A Model Context Protocol (MCP) server that hosts and orchestrates multiple Oracle table-specific data agents, allowing AI models to query databases through a standardized protocol.
+A Model Context Protocol (MCP) server that hosts and orchestrates multiple table-specific data agents across different database types (Oracle, SQL Server, PostgreSQL, IBM DB2), allowing AI models to query databases through a standardized protocol.
 
 > **⚠️ Disclaimer**: This code was generated with AI assistance (AI-generated code). It is provided "AS-IS" under the MIT License without warranty of any kind. Users should review and test thoroughly before production use, validate security implications, and ensure compliance with their organization's policies.
 
@@ -33,13 +33,18 @@ python mcp_server.py
 
 ```bash
 ./register_agent.sh \
-    --agent-id hr_employees \
+    --agent-id oracle_dbhost_hr_employees \
     --endpoint https://hr-employees-func.azurewebsites.net \
     --api-key your-function-key \
     --table EMPLOYEES \
     --schema HR \
+    --db-type oracle \
+    --host db.example.com \
+    --purview yes \
     --description "Query employee data"
 ```
+
+> **Note:** The `--purview` flag indicates whether Purview lookup was enabled during agent generation. The actual Purview description lookup requires `db_type`, `host`, `service_name`, `schema`, and `table_name` parameters during agent generation (via `generate_agents.sh`).
 
 ### Deploy to Azure
 
@@ -142,10 +147,24 @@ Then you can query data naturally:
          └────────────────────┴────────────────────┘
                               │
                               ▼
-                 ┌─────────────────────┐
-                 │   Oracle Database   │
-                 └─────────────────────┘
+    ┌──────────┐  ┌──────────┐  ┌──────────┐  ┌──────────┐
+    │  Oracle  │  │SQL Server│  │PostgreSQL│  │ IBM DB2  │
+    └──────────┘  └──────────┘  └──────────┘  └──────────┘
 ```
+
+## Agent Properties
+
+| Property | Description | Example |
+|----------|-------------|---------|
+| `agent_id` | Unique identifier | `oracle_dbhost_hr_employees` |
+| `database_type` | Database type: oracle, mssql, postgres, db2 | `oracle` |
+| `host` | Database server hostname | `db.example.com` |
+| `schema_name` | Database schema | `HR` |
+| `table_name` | Table name | `EMPLOYEES` |
+| `purview` | Purview integration enabled (yes/no) | `yes` |
+| `endpoint` | Azure Function endpoint URL | `https://...` |
+| `api_key` | Azure Function API key | `abc123...` |
+| `description` | Human-readable description | `Query employee data` |
 
 ## File Structure
 

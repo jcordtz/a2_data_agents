@@ -181,6 +181,19 @@ for agent_dir in "$AGENTS_DIR"/*/; do
     # Extract info from config
     table_name=$(grep -E "^table_name" "$config_file" | cut -d'=' -f2 | tr -d ' ')
     schema_name=$(grep -E "^schema" "$config_file" | head -1 | cut -d'=' -f2 | tr -d ' ')
+    host=$(grep -E "^host" "$config_file" | head -1 | cut -d'=' -f2 | tr -d ' ')
+    purview=$(grep -E "^purview" "$config_file" 2>/dev/null | cut -d'=' -f2 | tr -d ' ')
+    [ -z "$purview" ] && purview="no"
+    
+    # Detect database type from config file path or agent_id
+    database_type="oracle"
+    if echo "$agent_id" | grep -qi "^mssql"; then
+        database_type="mssql"
+    elif echo "$agent_id" | grep -qi "^postgres"; then
+        database_type="postgres"
+    elif echo "$agent_id" | grep -qi "^db2"; then
+        database_type="db2"
+    fi
     
     # Get endpoint and API key
     endpoint=$(get_endpoint "$agent_id")
@@ -194,7 +207,10 @@ for agent_dir in "$AGENTS_DIR"/*/; do
     
     print_info ""
     print_info "Processing: $agent_id"
+    print_info "  Database Type: $database_type"
+    print_info "  Host: ${host:-not specified}"
     print_info "  Table: $schema_name.$table_name"
+    print_info "  Purview: $purview"
     print_info "  Endpoint: $endpoint"
     
     if [ "$DRY_RUN" = true ]; then
@@ -210,6 +226,9 @@ for agent_dir in "$AGENTS_DIR"/*/; do
     "schema_name": "$schema_name",
     "endpoint": "$endpoint",
     "api_key": "$api_key",
+    "database_type": "$database_type",
+    "host": "$host",
+    "purview": "$purview",
     "description": "$description"
 }
 EOF

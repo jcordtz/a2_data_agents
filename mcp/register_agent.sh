@@ -28,6 +28,9 @@
 #   --api-key <key>        Azure Function API key (required)
 #   --table <name>         Table name (default: extracted from agent-id)
 #   --schema <name>        Schema name (default: extracted from agent-id)
+#   --db-type <type>       Database type: oracle, mssql, postgres, db2 (default: oracle)
+#   --host <hostname>      Database server hostname
+#   --purview <yes|no>     Purview integration enabled (default: no)
 #   --description <text>   Agent description
 #   --mcp-server <url>     MCP server URL (default: http://localhost:8080)
 #   --mcp-token <token>    MCP server auth token (optional)
@@ -67,6 +70,9 @@ ENDPOINT=""
 API_KEY=""
 TABLE_NAME=""
 SCHEMA_NAME=""
+DATABASE_TYPE="oracle"
+HOST=""
+PURVIEW="no"
 DESCRIPTION=""
 FROM_CONFIG=""
 
@@ -86,6 +92,9 @@ usage() {
     echo "  --api-key <key>        Azure Function API key"
     echo "  --table <name>         Table name"
     echo "  --schema <name>        Schema name"
+    echo "  --db-type <type>       Database type: oracle, mssql, postgres, db2 (default: oracle)"
+    echo "  --host <hostname>      Database server hostname"
+    echo "  --purview <yes|no>     Purview integration enabled (default: no)"
     echo "  --description <text>   Agent description"
     echo "  --mcp-server <url>     MCP server URL (default: http://localhost:8080)"
     echo "  --mcp-token <token>    MCP server auth token"
@@ -102,6 +111,9 @@ while [[ $# -gt 0 ]]; do
         --api-key) API_KEY="$2"; shift 2 ;;
         --table) TABLE_NAME="$2"; shift 2 ;;
         --schema) SCHEMA_NAME="$2"; shift 2 ;;
+        --db-type) DATABASE_TYPE="$2"; shift 2 ;;
+        --host) HOST="$2"; shift 2 ;;
+        --purview) PURVIEW="$2"; shift 2 ;;
         --description) DESCRIPTION="$2"; shift 2 ;;
         --mcp-server) MCP_SERVER="$2"; shift 2 ;;
         --mcp-token) MCP_TOKEN="$2"; shift 2 ;;
@@ -137,6 +149,29 @@ if [ -n "$FROM_CONFIG" ]; then
     
     if [ -z "$SCHEMA_NAME" ]; then
         SCHEMA_NAME=$(grep -E "^schema" "$CONFIG_FILE" | head -1 | cut -d'=' -f2 | tr -d ' ')
+    fi
+    
+    # Extract database type if not provided
+    if [ "$DATABASE_TYPE" = "oracle" ]; then
+        # Try to detect from config file path or content
+        if echo "$CONFIG_FILE" | grep -q "mssql"; then
+            DATABASE_TYPE="mssql"
+        elif echo "$CONFIG_FILE" | grep -q "postgres"; then
+            DATABASE_TYPE="postgres"
+        elif echo "$CONFIG_FILE" | grep -q "ibmdb2\|db2"; then
+            DATABASE_TYPE="db2"
+        fi
+    fi
+    
+    # Extract host if not provided
+    if [ -z "$HOST" ]; then
+        HOST=$(grep -E "^host" "$CONFIG_FILE" | head -1 | cut -d'=' -f2 | tr -d ' ')
+    fi
+    
+    # Extract purview setting if available
+    PURVIEW_CONFIG=$(grep -E "^purview" "$CONFIG_FILE" 2>/dev/null | cut -d'=' -f2 | tr -d ' ')
+    if [ -n "$PURVIEW_CONFIG" ] && [ "$PURVIEW" = "no" ]; then
+        PURVIEW="$PURVIEW_CONFIG"
     fi
     
     # Try to read README for description
@@ -182,10 +217,13 @@ fi
 print_info "========================================"
 print_info "Registering Agent with MCP Server"
 print_info "========================================"
-print_info "Agent ID:    $AGENT_ID"
-print_info "Table:       $SCHEMA_NAME.$TABLE_NAME"
-print_info "Endpoint:    $ENDPOINT"
-print_info "MCP Server:  $MCP_SERVER"
+print_info "Agent ID:      $AGENT_ID"
+print_info "Database Type: $DATABASE_TYPE"
+print_info "Host:          ${HOST:-not specified}"
+print_info "Table:         $SCHEMA_NAME.$TABLE_NAME"
+print_info "Purview:       $PURVIEW"
+print_info "Endpoint:      $ENDPOINT"
+print_info "MCP Server:    $MCP_SERVER"
 print_info "========================================"
 
 # Build JSON payload
@@ -196,6 +234,9 @@ JSON_PAYLOAD=$(cat <<EOF
     "schema_name": "$SCHEMA_NAME",
     "endpoint": "$ENDPOINT",
     "api_key": "$API_KEY",
+    "database_type": "$DATABASE_TYPE",
+    "host": "$HOST",
+    "purview": "$PURVIEW",
     "description": "$DESCRIPTION"
 }
 EOF

@@ -47,7 +47,7 @@ from typing import Optional
 # Add parent directory to path for imports
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from oracle import OracleConnector
+from databases.oracle import OracleConnector
 
 
 def generate_agent(
@@ -103,8 +103,8 @@ def generate_agent(
         # 2. Generate table_agent.py
         generate_table_agent(output_path, schema, table_name, table_description, columns)
         
-        # 3. Copy oracle_connector.py from oracle directory
-        source_connector = Path(__file__).parent.parent / "oracle" / "oracle_connector.py"
+        # 3. Copy oracle_connector.py from databases/oracle directory
+        source_connector = Path(__file__).parent.parent / "databases" / "oracle" / "oracle_connector.py"
         if source_connector.exists():
             shutil.copy(source_connector, output_path / "oracle_connector.py")
         else:

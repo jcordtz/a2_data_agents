@@ -61,25 +61,28 @@ An intelligent system that enables natural language querying of databases using 
 ```
 a2_data_agents/
 │
-├── oracle/                        # Oracle Database Module
-│   ├── __init__.py                # Module exports
-│   ├── oracle_connector.py        # SQLAlchemy-based connector (thick mode)
-│   └── oracle_config.ini          # Database connection configuration
-│
-├── mssql/                         # Microsoft SQL Server Module
-│   ├── __init__.py                # Module exports
-│   ├── mssql_connector.py         # SQLAlchemy-based connector (pyodbc)
-│   └── mssql_config.ini           # Database connection configuration
-│
-├── postgres/                      # PostgreSQL Module
-│   ├── __init__.py                # Module exports
-│   ├── postgres_connector.py      # SQLAlchemy-based connector (psycopg2)
-│   └── postgres_config.ini        # Database connection configuration
-│
-├── ibmdb2/                        # IBM DB2 LUW Module
-│   ├── __init__.py                # Module exports
-│   ├── ibmdb2_connector.py        # SQLAlchemy-based connector (ibm_db_sa)
-│   └── ibmdb2_config.ini          # Database connection configuration
+├── databases/                     # Database Connectors Package
+│   ├── __init__.py                # Package exports (all connectors)
+│   │
+│   ├── oracle/                    # Oracle Database Module
+│   │   ├── __init__.py            # Module exports
+│   │   ├── oracle_connector.py    # SQLAlchemy-based connector (thick mode)
+│   │   └── oracle_config.ini      # Database connection configuration
+│   │
+│   ├── mssql/                     # Microsoft SQL Server Module
+│   │   ├── __init__.py            # Module exports
+│   │   ├── mssql_connector.py     # SQLAlchemy-based connector (pyodbc)
+│   │   └── mssql_config.ini       # Database connection configuration
+│   │
+│   ├── postgres/                  # PostgreSQL Module
+│   │   ├── __init__.py            # Module exports
+│   │   ├── postgres_connector.py  # SQLAlchemy-based connector (psycopg2)
+│   │   └── postgres_config.ini    # Database connection configuration
+│   │
+│   └── ibmdb2/                    # IBM DB2 LUW Module
+│       ├── __init__.py            # Module exports
+│       ├── ibmdb2_connector.py    # SQLAlchemy-based connector (ibm_db_sa)
+│       └── ibmdb2_config.ini      # Database connection configuration
 │
 ├── agents/                        # AI Agent Module
 │   ├── __init__.py                # Module exports
@@ -180,7 +183,7 @@ Choose the database(s) you want to use:
 
 #### Oracle
 
-Edit `oracle/oracle_config.ini`:
+Edit `databases/oracle/oracle_config.ini`:
 
 ```ini
 [oracle]
@@ -188,13 +191,13 @@ host = your-oracle-host
 port = 1521
 service_name = YOUR_SERVICE
 schema = YOUR_SCHEMA
-username = your_username
-password = your_password
+username = <your-username>
+password = <your-password>
 ```
 
 #### SQL Server
 
-Edit `mssql/mssql_config.ini`:
+Edit `databases/mssql/mssql_config.ini`:
 
 ```ini
 [mssql]
@@ -203,8 +206,8 @@ port = 1433
 database = your_database
 
 # SQL Authentication
-username = your_username
-password = your_password
+username = <your-username>
+password = <your-password>
 
 # OR use Windows/Integrated authentication
 # trusted_connection = True
@@ -222,7 +225,7 @@ country = US
 
 #### PostgreSQL
 
-Edit `postgres/postgres_config.ini`:
+Edit `databases/postgres/postgres_config.ini`:
 
 ```ini
 [postgres]
@@ -231,8 +234,8 @@ port = 5432
 database = your_database
 
 # Authentication
-username = your_username
-password = your_password
+username = <your-username>
+password = <your-password>
 
 # Schema (defaults to 'public')
 schema = public
@@ -250,7 +253,7 @@ country = US
 
 #### IBM DB2 LUW
 
-Edit `ibmdb2/ibmdb2_config.ini`:
+Edit `databases/ibmdb2/ibmdb2_config.ini`:
 
 ```ini
 [ibmdb2]
@@ -259,8 +262,8 @@ port = 50000
 database = your_database
 
 # Authentication
-username = your_username
-password = your_password
+username = <your-username>
+password = <your-password>
 
 # Schema (defaults to username if not specified)
 schema = 
@@ -326,7 +329,7 @@ curl -X POST http://localhost:7071/api/reset
 ```bash
 # Generate a single agent
 python agents/agent_generator.py \
-  --config oracle/oracle_config.ini \
+  --config databases/oracle/oracle_config.ini \
   --schema HR \
   --table EMPLOYEES \
   --output ./generated_agents/hr_employees
@@ -430,9 +433,10 @@ az deployment group create \
 
 | Component | Description | Documentation |
 |-----------|-------------|---------------|
-| **Oracle Connector** | SQLAlchemy-based Oracle connectivity with thick mode, connection pooling, and DataFrame support | See docstrings in [oracle/oracle_connector.py](oracle/oracle_connector.py) |
-| **MSSQL Connector** | SQLAlchemy-based SQL Server connectivity with pyodbc, connection pooling, and DataFrame support | See docstrings in [mssql/mssql_connector.py](mssql/mssql_connector.py) |
-| **PostgreSQL Connector** | SQLAlchemy-based PostgreSQL connectivity with psycopg2, connection pooling, and DataFrame support | See docstrings in [postgres/postgres_connector.py](postgres/postgres_connector.py) |
+| **Oracle Connector** | SQLAlchemy-based Oracle connectivity with thick mode, connection pooling, and DataFrame support | See docstrings in [databases/oracle/oracle_connector.py](databases/oracle/oracle_connector.py) |
+| **MSSQL Connector** | SQLAlchemy-based SQL Server connectivity with pyodbc, connection pooling, and DataFrame support | See docstrings in [databases/mssql/mssql_connector.py](databases/mssql/mssql_connector.py) |
+| **PostgreSQL Connector** | SQLAlchemy-based PostgreSQL connectivity with psycopg2, connection pooling, and DataFrame support | See docstrings in [databases/postgres/postgres_connector.py](databases/postgres/postgres_connector.py) |
+| **IBM DB2 Connector** | SQLAlchemy-based IBM DB2 LUW connectivity with ibm_db_sa, connection pooling, and DataFrame support | See docstrings in [databases/ibmdb2/ibmdb2_connector.py](databases/ibmdb2/ibmdb2_connector.py) |
 | **Data Agent** | Azure OpenAI-powered agent for natural language to SQL translation | See docstrings in [agents/data_agent.py](agents/data_agent.py) |
 | **Function App** | Azure Function HTTP endpoints for the data agent | See docstrings in [agents/function_app.py](agents/function_app.py) |
 | **Agent Generator** | Generates standalone Azure Function agents for specific tables | See docstrings in [agents/agent_generator.py](agents/agent_generator.py) |
@@ -443,7 +447,7 @@ az deployment group create \
 
 ## Configuration Reference
 
-### Oracle Configuration (`oracle/oracle_config.ini`)
+### Oracle Configuration (`databases/oracle/oracle_config.ini`)
 
 ```ini
 [oracle]
@@ -451,12 +455,12 @@ host = localhost          # Oracle host
 port = 1521               # Oracle port
 service_name = ORCL       # Oracle service name
 schema = HR               # Default schema
-username = hr_user        # Database username
-password = secret         # Database password
+username = <your-username>        # Database username
+password = <your-password>         # Database password
 lib_dir = /path/to/instantclient  # Optional: Oracle Instant Client path
 ```
 
-### SQL Server Configuration (`mssql/mssql_config.ini`)
+### SQL Server Configuration (`databases/mssql/mssql_config.ini`)
 
 ```ini
 [mssql]
@@ -464,14 +468,14 @@ host = localhost          # SQL Server host
 port = 1433               # SQL Server port
 database = master         # Database name
 schema = dbo              # Default schema
-username = sa             # Database username
-password = secret         # Database password
+username = <your-username>             # Database username
+password = <your-password>         # Database password
 driver = ODBC Driver 18 for SQL Server  # ODBC driver name
 trusted_connection = False  # Use Windows authentication
 trust_server_certificate = True  # Trust self-signed certs
 ```
 
-### PostgreSQL Configuration (`postgres/postgres_config.ini`)
+### PostgreSQL Configuration (`databases/postgres/postgres_config.ini`)
 
 ```ini
 [postgres]
@@ -479,8 +483,8 @@ host = localhost          # PostgreSQL host
 port = 5432               # PostgreSQL port
 database = postgres       # Database name
 schema = public           # Default schema
-username = postgres       # Database username
-password = secret         # Database password
+username = <your-username>       # Database username
+password = <your-password>         # Database password
 sslmode = prefer          # SSL mode (disable, allow, prefer, require)
 ```
 
@@ -559,8 +563,14 @@ pytest tests/
 ### Local Development
 
 ```bash
-# Start Oracle connector test
-python -c "from oracle import OracleConnector; print('OK')"
+# Test database connectors
+python -c "from databases.oracle import OracleConnector; print('OK')"
+python -c "from databases.mssql import MSSQLConnector; print('OK')"
+python -c "from databases.postgres import PostgresConnector; print('OK')"
+python -c "from databases.ibmdb2 import IBMDB2Connector; print('OK')"
+
+# Or import all at once
+python -c "from databases import OracleConnector, MSSQLConnector, PostgresConnector, IBMDB2Connector; print('OK')"
 
 # Test data agent
 python -c "from agents import DataAgent; print('OK')"
@@ -721,7 +731,7 @@ pip install -r requirements.txt
 Copy and edit the configuration:
 
 ```bash
-cp oracle/oracle_config.ini oracle/my_oracle_config.ini
+cp databases/oracle/oracle_config.ini databases/oracle/my_oracle_config.ini
 cp agent_config.ini my_config.ini
 # Edit both files with your settings
 ```
@@ -826,7 +836,7 @@ with DataAgent("agent_config.ini") as agent:
 ```ini
 [azure_openai]
 endpoint = https://your-resource.openai.azure.com/
-api_key = your-api-key
+api_key = <your-api-key>
 api_version = 2024-02-15-preview
 deployment_name = gpt-4o
 
@@ -834,9 +844,37 @@ deployment_name = gpt-4o
 host = your-oracle-host
 port = 1521
 service_name = ORCL
-username = your_username
-password = your_password
+username = <your-username>
+password = <your-password>
 schema = your_schema
+
+[mssql]
+host = your-sql-server-host
+port = 1433
+database = your_database
+username = <your-username>
+password = <your-password>
+schema = dbo
+driver = ODBC Driver 18 for SQL Server
+trusted_connection = False
+trust_server_certificate = True
+
+[postgres]
+host = your-postgres-host
+port = 5432
+database = your_database
+username = <your-username>
+password = <your-password>
+schema = public
+sslmode = prefer
+
+[ibmdb2]
+host = your-db2-host
+port = 50000
+database = your_database
+username = <your-username>
+password = <your-password>
+schema = 
 
 [agent]
 max_iterations = 10
@@ -846,10 +884,37 @@ system_prompt = You are a helpful data analyst assistant.
 
 ## Security Considerations
 
-1. **Secrets**: Store sensitive values in Azure Key Vault (handled by Bicep deployment)
-2. **Network**: Consider using Private Endpoints for Oracle connectivity
-3. **Authentication**: The function uses function-level auth keys
-4. **SQL Injection**: The agent only allows SELECT queries
+### Secrets Management
+- **Azure Key Vault**: Store database credentials and API keys in Key Vault (handled by Bicep and Terraform deployments)
+- **Environment Variables**: Never commit credentials to source control; use environment variables or Key Vault references
+- **Config Files**: Add `*_config.ini` files to `.gitignore` to prevent accidental commits
+
+### Network Security
+- **Private Endpoints**: Consider using Azure Private Endpoints for database connectivity:
+  - Oracle: Private Link or VPN/ExpressRoute
+  - SQL Server: Azure Private Link for Azure SQL, or VPN for on-premises
+  - PostgreSQL: Azure Private Link for Azure Database for PostgreSQL
+  - IBM DB2: VPN or ExpressRoute for secure connectivity
+- **Firewall Rules**: Restrict database access to Azure Function outbound IPs
+- **SSL/TLS**: Enable encrypted connections for all database types
+
+### Authentication
+- **Function Auth**: Azure Functions use function-level keys for API authentication
+- **Database Auth**: 
+  - SQL Server: Use SQL authentication or Azure AD (Managed Identity where supported)
+  - PostgreSQL: Use SSL mode `require` or higher for production
+  - IBM DB2: Use encrypted connections with SSL enabled
+  - Oracle: Consider using wallets for secure credential storage
+
+### SQL Injection Prevention
+- The agent only allows SELECT queries (no INSERT, UPDATE, DELETE, DROP)
+- Parameterized queries via SQLAlchemy prevent SQL injection
+- User input is validated before query generation
+
+### Infrastructure as Code Security
+- **Bicep**: Uses secure parameters for sensitive values (`@secure()` decorator)
+- **Terraform**: Use `sensitive = true` for credential variables; store state securely (Azure Storage with encryption)
+- **State Files**: Never commit Terraform state files; use remote backends with encryption
 
 ## License
 

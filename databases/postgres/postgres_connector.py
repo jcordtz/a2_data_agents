@@ -109,12 +109,13 @@ from pathlib import Path
 from typing import Optional, Dict, Any, List
 from urllib.parse import quote_plus
 
+# Defer import error to class instantiation for graceful package loading
+_PSYCOPG2_IMPORT_ERROR = None
 try:
     import psycopg2
-except ImportError:
-    raise ImportError(
-        "psycopg2 package is required. Install it with: pip install psycopg2-binary"
-    )
+except ImportError as e:
+    psycopg2 = None  # type: ignore
+    _PSYCOPG2_IMPORT_ERROR = e
 
 try:
     from sqlalchemy import create_engine, text
@@ -138,6 +139,11 @@ class PostgresConnector:
         Args:
             config_path: Path to the configuration INI file
         """
+        if _PSYCOPG2_IMPORT_ERROR is not None:
+            raise ImportError(
+                "psycopg2 package is required. Install it with: pip install psycopg2-binary"
+            ) from _PSYCOPG2_IMPORT_ERROR
+        
         self.config_path = Path(config_path)
         self.config = self._load_config()
         self.engine: Optional[Engine] = None

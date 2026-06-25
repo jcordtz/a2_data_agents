@@ -51,7 +51,7 @@ BLUE='\033[0;34m'
 NC='\033[0m' # No Color
 
 # Default configuration
-CONFIG_PATH="oracle/oracle_config.ini"
+CONFIG_PATH="databases/oracle/oracle_config.ini"
 OUTPUT_DIR="./generated_agents"
 DEPLOY=false
 RESOURCE_GROUP=""
@@ -62,7 +62,7 @@ usage() {
     echo "Usage: $0 <csv_file> [options]"
     echo ""
     echo "Options:"
-    echo "  --config <path>        Path to oracle_config.ini (default: oracle/oracle_config.ini)"
+    echo "  --config <path>        Path to oracle_config.ini (default: databases/oracle/oracle_config.ini)"
     echo "  --output <dir>         Output directory for generated agents (default: ./agents)"
     echo "  --deploy               Deploy agents to Azure after generation"
     echo "  --resource-group <rg>  Azure resource group for deployment"

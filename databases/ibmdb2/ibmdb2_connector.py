@@ -109,13 +109,15 @@ import pandas as pd
 from pathlib import Path
 from typing import Optional, Dict, Any, List
 
+# Defer import error to class instantiation for graceful package loading
+_IBMDB_IMPORT_ERROR = None
 try:
     import ibm_db
     import ibm_db_sa
-except ImportError:
-    raise ImportError(
-        "ibm_db and ibm_db_sa packages are required. Install with: pip install ibm_db ibm_db_sa"
-    )
+except ImportError as e:
+    ibm_db = None  # type: ignore
+    ibm_db_sa = None  # type: ignore
+    _IBMDB_IMPORT_ERROR = e
 
 try:
     from sqlalchemy import create_engine, text
@@ -139,6 +141,11 @@ class IBMDB2Connector:
         Args:
             config_path: Path to the configuration INI file
         """
+        if _IBMDB_IMPORT_ERROR is not None:
+            raise ImportError(
+                "ibm_db and ibm_db_sa packages are required. Install with: pip install ibm_db ibm_db_sa"
+            ) from _IBMDB_IMPORT_ERROR
+        
         self.config_path = Path(config_path)
         self.config = self._load_config()
         self.engine: Optional[Engine] = None

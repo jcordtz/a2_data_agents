@@ -109,12 +109,13 @@ import pandas as pd
 from pathlib import Path
 from typing import Optional, Dict, Any, List
 
+# Defer import error to class instantiation for graceful package loading
+_ORACLEDB_IMPORT_ERROR = None
 try:
     import oracledb
-except ImportError:
-    raise ImportError(
-        "oracledb package is required. Install it with: pip install oracledb"
-    )
+except ImportError as e:
+    oracledb = None  # type: ignore
+    _ORACLEDB_IMPORT_ERROR = e
 
 try:
     from sqlalchemy import create_engine, text
@@ -138,6 +139,11 @@ class OracleConnector:
         Args:
             config_path: Path to the configuration INI file
         """
+        if _ORACLEDB_IMPORT_ERROR is not None:
+            raise ImportError(
+                "oracledb package is required. Install it with: pip install oracledb"
+            ) from _ORACLEDB_IMPORT_ERROR
+        
         self.config_path = Path(config_path)
         self.config = self._load_config()
         self.engine: Optional[Engine] = None

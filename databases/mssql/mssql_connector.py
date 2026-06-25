@@ -110,12 +110,13 @@ from pathlib import Path
 from typing import Optional, Dict, Any, List
 from urllib.parse import quote_plus
 
+# Defer import error to class instantiation for graceful package loading
+_PYODBC_IMPORT_ERROR = None
 try:
     import pyodbc
-except ImportError:
-    raise ImportError(
-        "pyodbc package is required. Install it with: pip install pyodbc"
-    )
+except ImportError as e:
+    pyodbc = None  # type: ignore
+    _PYODBC_IMPORT_ERROR = e
 
 try:
     from sqlalchemy import create_engine, text
@@ -139,6 +140,11 @@ class MSSQLConnector:
         Args:
             config_path: Path to the configuration INI file
         """
+        if _PYODBC_IMPORT_ERROR is not None:
+            raise ImportError(
+                "pyodbc package is required. Install it with: pip install pyodbc"
+            ) from _PYODBC_IMPORT_ERROR
+        
         self.config_path = Path(config_path)
         self.config = self._load_config()
         self.engine: Optional[Engine] = None

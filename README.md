@@ -1,19 +1,33 @@
 # Multi-Database Data Agents
 
-**AI-powered natural language querying for Oracle, SQL Server, PostgreSQL, and IBM DB2 databases, deployed as Azure Functions with MCP orchestration.
-**
+**AI-powered natural language querying for Oracle, SQL Server, PostgreSQL, and IBM DB2 databases, with a chatbot interface, Azure Functions deployment, and MCP orchestration.**
 
-An intelligent system that enables natural language querying of databases using Azure OpenAI. Supports **Oracle**, **Microsoft SQL Server**, **PostgreSQL**, and **IBM DB2 LUW**. Generate table-specific agents automatically, deploy them to Azure, and orchestrate them through a Model Context Protocol (MCP) server.
+## Overview
 
-## Background
+This solution enables natural language querying of enterprise databases using Azure OpenAI, designed for organizations that need flexible, adaptive access to their data across multiple database systems.
 
-The idea behind this approach to "surface" tables come from a discussion I had with an NGO. They handle crisis in different parts of the world and no two crisis are the same, so an approach where "we do the same as last time" is really not possible. 
+### The Problem
 
-This of course provides a challenge to "ERP-system" approach. 
+Traditional ERP and database systems assume predictable, repeatable workflows—but many organizations face dynamic challenges where "doing it the same way as last time" simply isn't possible. Crisis response organizations, for example, handle unique situations where data requirements vary dramatically from case to case. They need to quickly access and combine information from various enterprise tables (vendors, items, personnel, etc.) in ways that can't be anticipated in advance.
 
-So this approach reflects that all the "basic" information will be present in (different) ERP systems -like vendors, items, personal etc. If we then let the important tables surface them self on a by one in through individual agents. 
+### The Solution
 
-And these invidual agents use the documentation stored with the tables (comments on the table and associated columns, which then need to be present ::smile::) as well as information about how the table can combined with other tables (references) then an overall "chatbot" could be used to ask and combine the required tables to accomplish the "real" task in question.
+This system takes a different approach: rather than building rigid interfaces, it lets important database tables "surface themselves" as individual AI agents. Each table-specific agent uses:
+
+- **Table documentation** (comments on tables and columns) to understand what the data represents
+- **Relationship metadata** (foreign keys, references) to know how tables can be combined
+- **Natural language understanding** to translate questions into optimized SQL
+
+An overall **chatbot interface** then orchestrates these agents through a Model Context Protocol (MCP) server, allowing users to ask complex questions that span multiple tables and databases—without needing to know SQL or understand the underlying schema.
+
+### Supported Databases
+
+- **Oracle** (with thick mode support)
+- **Microsoft SQL Server** (via pyodbc)
+- **PostgreSQL** (via psycopg2)
+- **IBM DB2 LUW** (via ibm_db)
+
+---
 
 ## Features
 

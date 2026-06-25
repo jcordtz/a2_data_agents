@@ -1,0 +1,87 @@
+{
+  "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentParameters.json#",
+  "contentVersion": "1.0.0.0",
+  "parameters": {
+    "baseName": {
+      "value": "dataagent"
+    },
+    "location": {
+      "value": "eastus"
+    },
+    "openAIDeploymentName": {
+      "value": "gpt-4o"
+    },
+    "oracleHost": {
+      "value": "YOUR_ORACLE_HOST"
+    },
+    "oraclePort": {
+      "value": "1521"
+    },
+    "oracleServiceName": {
+      "value": "ORCL"
+    },
+    "oracleUsername": {
+      "value": "YOUR_ORACLE_USERNAME"
+    },
+    "oraclePassword": {
+      "value": "YOUR_ORACLE_PASSWORD"
+    },
+    "mssqlHost": {
+      "value": ""
+    },
+    "mssqlPort": {
+      "value": "1433"
+    },
+    "mssqlDatabase": {
+      "value": ""
+    },
+    "mssqlUsername": {
+      "value": ""
+    },
+    "mssqlPassword": {
+      "value": ""
+    },
+    "mssqlTrustedConnection": {
+      "value": false
+    },
+    "postgresHost": {
+      "value": ""
+    },
+    "postgresPort": {
+      "value": "5432"
+    },
+    "postgresDatabase": {
+      "value": ""
+    },
+    "postgresUsername": {
+      "value": ""
+    },
+    "postgresPassword": {
+      "value": ""
+    },
+    "ibmdb2Host": {
+      "value": ""
+    },
+    "ibmdb2Port": {
+      "value": "50000"
+    },
+    "ibmdb2Database": {
+      "value": ""
+    },
+    "ibmdb2Username": {
+      "value": ""
+    },
+    "ibmdb2Password": {
+      "value": ""
+    },
+    "deployChatbot": {
+      "value": false
+    },
+    "chatbotMcpServerUrl": {
+      "value": ""
+    },
+    "chatbotSku": {
+      "value": "Free"
+    }
+  }
+}

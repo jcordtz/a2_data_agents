@@ -1,8 +1,8 @@
-# Oracle Data Agents
+# Multi-Database Data Agents
 
-**AI-powered natural language querying for Oracle databases, deployed as Azure Functions with MCP orchestration.**
+**AI-powered natural language querying for Oracle, SQL Server, PostgreSQL, and IBM DB2 databases, deployed as Azure Functions with MCP orchestration.**
 
-An intelligent system that enables natural language querying of Oracle databases using Azure OpenAI. Generate table-specific agents automatically, deploy them to Azure, and orchestrate them through a Model Context Protocol (MCP) server.
+An intelligent system that enables natural language querying of databases using Azure OpenAI. Supports **Oracle**, **Microsoft SQL Server**, **PostgreSQL**, and **IBM DB2 LUW**. Generate table-specific agents automatically, deploy them to Azure, and orchestrate them through a Model Context Protocol (MCP) server.
 
 > **⚠️ Disclaimer**: This code was generated with AI assistance (AI-generated code). It is provided "AS-IS" under the MIT License without warranty of any kind. Users should review and test thoroughly before production use, validate security implications for their specific use case, and ensure compliance with their organization's policies. See the [LICENSE](LICENSE) file for full license text.
 
@@ -10,12 +10,13 @@ An intelligent system that enables natural language querying of Oracle databases
 
 ## Features
 
+- **Multi-Database Support**: Connect to Oracle, SQL Server, PostgreSQL, and IBM DB2 LUW
 - **Natural Language Queries**: Ask questions in plain English (or 30+ other languages)
-- **Automatic SQL Generation**: AI translates questions to optimized Oracle SQL
+- **Automatic SQL Generation**: AI translates questions to optimized database-specific SQL
 - **Table-Specific Agents**: Generate dedicated agents for individual tables
 - **Azure Functions Deployment**: Serverless, scalable Azure hosting
 - **MCP Server Orchestration**: Unified interface for multiple agents
-- **SQLAlchemy + Thick Mode**: Robust Oracle connectivity with connection pooling
+- **SQLAlchemy Integration**: Robust database connectivity with connection pooling
 - **Infrastructure as Code**: Bicep templates for Azure deployment
 
 ---
@@ -44,12 +45,13 @@ An intelligent system that enables natural language querying of Oracle databases
 └────────┬─────────┘   └────────┬─────────┘   └────────┬─────────┘
          │                      │                      │
          └──────────────────────┼──────────────────────┘
-                                │ SQLAlchemy (Thick Mode)
-                                ▼
-                  ┌─────────────────────────┐
-                  │    Oracle Database      │
-                  │  (HR, SALES, INVENTORY) │
-                  └─────────────────────────┘
+                                │ SQLAlchemy
+    ┌───────────────────────────┼───────────────────────────┐
+    ▼               ▼           ▼           ▼               ▼
+┌─────────┐   ┌───────────┐   ┌──────────┐   ┌───────────┐
+│ Oracle  │   │SQL Server │   │PostgreSQL│   │ IBM DB2   │
+│Database │   │ Database  │   │ Database │   │ Database  │
+└─────────┘   └───────────┘   └──────────┘   └───────────┘
 ```
 
 ---
@@ -63,6 +65,21 @@ a2_data_agents/
 │   ├── __init__.py                # Module exports
 │   ├── oracle_connector.py        # SQLAlchemy-based connector (thick mode)
 │   └── oracle_config.ini          # Database connection configuration
+│
+├── mssql/                         # Microsoft SQL Server Module
+│   ├── __init__.py                # Module exports
+│   ├── mssql_connector.py         # SQLAlchemy-based connector (pyodbc)
+│   └── mssql_config.ini           # Database connection configuration
+│
+├── postgres/                      # PostgreSQL Module
+│   ├── __init__.py                # Module exports
+│   ├── postgres_connector.py      # SQLAlchemy-based connector (psycopg2)
+│   └── postgres_config.ini        # Database connection configuration
+│
+├── ibmdb2/                        # IBM DB2 LUW Module
+│   ├── __init__.py                # Module exports
+│   ├── ibmdb2_connector.py        # SQLAlchemy-based connector (ibm_db_sa)
+│   └── ibmdb2_config.ini          # Database connection configuration
 │
 ├── agents/                        # AI Agent Module
 │   ├── __init__.py                # Module exports
@@ -83,9 +100,35 @@ a2_data_agents/
 │       ├── main.bicep             # Container Apps + ACR + Storage
 │       └── main.parameters.json   # Deployment parameters
 │
+├── chatbot/                       # Chatbot Web Interface
+│   ├── src/                       # React source code
+│   │   ├── components/            # UI components (Chat, Header, etc.)
+│   │   ├── hooks/                 # Custom React hooks
+│   │   ├── services/              # API services
+│   │   └── styles/                # CSS styles
+│   ├── api/                       # Azure Functions API proxy
+│   │   ├── query/                 # Query endpoint
+│   │   ├── agents/                # List agents endpoint
+│   │   └── health/                # Health check
+│   ├── infra/                     # Chatbot infrastructure
+│   │   ├── main.bicep             # Static Web Apps + App Insights
+│   │   └── main.parameters.json   # Deployment parameters
+│   ├── package.json               # Node.js dependencies
+│   ├── vite.config.js             # Vite build configuration
+│   ├── staticwebapp.config.json   # Azure Static Web Apps config
+│   ├── deploy.sh                  # Deployment script
+│   └── README.md                  # Chatbot documentation
+│
 ├── infra/                         # Main Infrastructure
-│   ├── main.bicep                 # Azure Function + OpenAI + Storage
-│   └── main.parameters.json       # Deployment parameters
+│   ├── bicep/                     # Azure Bicep templates
+│   │   ├── main.bicep             # Azure Function + OpenAI + Storage + Chatbot
+│   │   └── main.parameters.json   # Deployment parameters
+│   └── terraform/                 # Terraform configuration
+│       ├── main.tf                # Main infrastructure resources
+│       ├── variables.tf           # Input variables
+│       ├── outputs.tf             # Output values
+│       ├── providers.tf           # Provider configuration
+│       └── terraform.tfvars.example  # Example variable values
 │
 ├── agent_config.ini               # Main agent configuration template
 ├── deploy.sh                      # Main deployment script
@@ -106,11 +149,22 @@ a2_data_agents/
 ### Prerequisites
 
 - Python 3.11+
-- Oracle Instant Client (for thick mode)
 - Azure CLI
 - Azure subscription with:
   - Azure OpenAI access
   - Permissions to create resources
+
+**Database-specific requirements:**
+- **Oracle**: Oracle Instant Client (for thick mode)
+- **SQL Server**: Microsoft ODBC Driver 18 for SQL Server
+  - macOS: `brew install microsoft/mssql-release/msodbcsql18`
+  - Ubuntu: `sudo apt-get install msodbcsql18`
+  - Windows: Download from Microsoft
+- **PostgreSQL**: No additional drivers required (psycopg2-binary included)
+- **IBM DB2**: IBM Data Server Driver Package (clidriver)
+  - Download from [IBM Fix Central](https://www.ibm.com/support/fixcentral/)
+  - Set `IBM_DB_HOME` environment variable to clidriver path
+  - Linux/macOS: Add to `LD_LIBRARY_PATH`/`DYLD_LIBRARY_PATH`
 
 ### 1. Clone and Install
 
@@ -120,7 +174,11 @@ cd a2_data_agents
 pip install -r requirements.txt
 ```
 
-### 2. Configure Oracle Connection
+### 2. Configure Database Connection
+
+Choose the database(s) you want to use:
+
+#### Oracle
 
 Edit `oracle/oracle_config.ini`:
 
@@ -132,6 +190,90 @@ service_name = YOUR_SERVICE
 schema = YOUR_SCHEMA
 username = your_username
 password = your_password
+```
+
+#### SQL Server
+
+Edit `mssql/mssql_config.ini`:
+
+```ini
+[mssql]
+host = your-sql-server-host
+port = 1433
+database = your_database
+
+# SQL Authentication
+username = your_username
+password = your_password
+
+# OR use Windows/Integrated authentication
+# trusted_connection = True
+
+# Schema (defaults to 'dbo')
+schema = dbo
+
+# Connection pooling
+min_connections = 1
+max_connections = 5
+
+# Language for natural language responses
+country = US
+```
+
+#### PostgreSQL
+
+Edit `postgres/postgres_config.ini`:
+
+```ini
+[postgres]
+host = your-postgres-host
+port = 5432
+database = your_database
+
+# Authentication
+username = your_username
+password = your_password
+
+# Schema (defaults to 'public')
+schema = public
+
+# Connection pooling
+min_connections = 1
+max_connections = 5
+
+# SSL mode (disable, allow, prefer, require, verify-ca, verify-full)
+sslmode = prefer
+
+# Language for natural language responses
+country = US
+```
+
+#### IBM DB2 LUW
+
+Edit `ibmdb2/ibmdb2_config.ini`:
+
+```ini
+[ibmdb2]
+host = your-db2-host
+port = 50000
+database = your_database
+
+# Authentication
+username = your_username
+password = your_password
+
+# Schema (defaults to username if not specified)
+schema = 
+
+# Connection pooling
+min_connections = 1
+max_connections = 5
+
+# SSL (optional)
+# ssl = True
+
+# Language for natural language responses
+country = US
 ```
 
 ### 3. Configure Azure OpenAI
@@ -248,6 +390,40 @@ POST /mcp/v1/tools/call
 }
 ```
 
+### Chatbot Interface
+
+The chatbot provides a web-based UI for interacting with the MCP server.
+
+```bash
+cd chatbot
+
+# Install dependencies
+npm install
+
+# Start development server
+npm run dev
+
+# Build for production
+npm run build
+
+# Deploy to Azure Static Web Apps
+./deploy.sh \
+  --resource-group chat-rg \
+  --mcp-url https://your-mcp-server.azurecontainer.io \
+  --location eastus2
+```
+
+Or deploy as part of the main infrastructure:
+
+```bash
+# Deploy all infrastructure including chatbot
+az deployment group create \
+  -g your-resource-group \
+  -f infra/main.bicep \
+  --parameters deployChatbot=true \
+  --parameters chatbotMcpServerUrl=https://your-mcp-server.url
+```
+
 ---
 
 ## Component Documentation
@@ -255,10 +431,13 @@ POST /mcp/v1/tools/call
 | Component | Description | Documentation |
 |-----------|-------------|---------------|
 | **Oracle Connector** | SQLAlchemy-based Oracle connectivity with thick mode, connection pooling, and DataFrame support | See docstrings in [oracle/oracle_connector.py](oracle/oracle_connector.py) |
+| **MSSQL Connector** | SQLAlchemy-based SQL Server connectivity with pyodbc, connection pooling, and DataFrame support | See docstrings in [mssql/mssql_connector.py](mssql/mssql_connector.py) |
+| **PostgreSQL Connector** | SQLAlchemy-based PostgreSQL connectivity with psycopg2, connection pooling, and DataFrame support | See docstrings in [postgres/postgres_connector.py](postgres/postgres_connector.py) |
 | **Data Agent** | Azure OpenAI-powered agent for natural language to SQL translation | See docstrings in [agents/data_agent.py](agents/data_agent.py) |
 | **Function App** | Azure Function HTTP endpoints for the data agent | See docstrings in [agents/function_app.py](agents/function_app.py) |
 | **Agent Generator** | Generates standalone Azure Function agents for specific tables | See docstrings in [agents/agent_generator.py](agents/agent_generator.py) |
 | **MCP Server** | FastAPI-based Model Context Protocol server | See [mcp/README.md](mcp/README.md) |
+| **Chatbot Interface** | React-based web UI for querying data through MCP server | See [chatbot/README.md](chatbot/README.md) |
 
 ---
 
@@ -274,6 +453,35 @@ service_name = ORCL       # Oracle service name
 schema = HR               # Default schema
 username = hr_user        # Database username
 password = secret         # Database password
+lib_dir = /path/to/instantclient  # Optional: Oracle Instant Client path
+```
+
+### SQL Server Configuration (`mssql/mssql_config.ini`)
+
+```ini
+[mssql]
+host = localhost          # SQL Server host
+port = 1433               # SQL Server port
+database = master         # Database name
+schema = dbo              # Default schema
+username = sa             # Database username
+password = secret         # Database password
+driver = ODBC Driver 18 for SQL Server  # ODBC driver name
+trusted_connection = False  # Use Windows authentication
+trust_server_certificate = True  # Trust self-signed certs
+```
+
+### PostgreSQL Configuration (`postgres/postgres_config.ini`)
+
+```ini
+[postgres]
+host = localhost          # PostgreSQL host
+port = 5432               # PostgreSQL port
+database = postgres       # Database name
+schema = public           # Default schema
+username = postgres       # Database username
+password = secret         # Database password
+sslmode = prefer          # SSL mode (disable, allow, prefer, require)
 ```
 
 ### Agent Configuration (`agent_config.ini`)
@@ -370,12 +578,14 @@ cd mcp && python mcp_server.py
 
 ### Azure Resources Created
 
-**Main Agent (`infra/main.bicep`):**
+**Main Agent (via Bicep or Terraform):**
 - Azure Function App (Python 3.11)
-- Azure OpenAI Service
-- App Service Plan
+- Azure OpenAI Service with GPT-4o
+- App Service Plan (Consumption)
 - Storage Account
 - Application Insights
+- Key Vault (for database credentials)
+- Optional: Static Web App (for chatbot)
 
 **MCP Server (`mcp/infra/main.bicep`):**
 - Azure Container Apps
@@ -383,16 +593,41 @@ cd mcp && python mcp_server.py
 - Log Analytics Workspace
 - Storage Account (for registry)
 
-### Deployment Commands
+### Deployment Options
+
+#### Option 1: Bicep
 
 ```bash
 # Deploy main agent infrastructure
 az deployment group create \
   -g your-resource-group \
-  -f infra/main.bicep \
-  --parameters @infra/main.parameters.json
+  -f infra/bicep/main.bicep \
+  --parameters @infra/bicep/main.parameters.json
+```
 
-# Deploy MCP server infrastructure
+#### Option 2: Terraform
+
+```bash
+cd infra/terraform
+
+# Initialize Terraform
+terraform init
+
+# Copy example variables file and update with your values
+cp terraform.tfvars.example terraform.tfvars
+# Edit terraform.tfvars with your settings
+
+# Preview the deployment
+terraform plan
+
+# Deploy
+terraform apply
+```
+
+### Deploy MCP Server
+
+```bash
+# Deploy MCP server infrastructure (Bicep)
 az deployment group create \
   -g mcp-resource-group \
   -f mcp/infra/main.bicep \
@@ -408,6 +643,29 @@ az deployment group create \
 1. **Thick mode not initialized**: Ensure Oracle Instant Client is installed and `init_oracle_client()` can find it
 2. **Connection timeout**: Check firewall rules and Oracle listener status
 3. **Authentication failed**: Verify credentials in `oracle_config.ini`
+
+### SQL Server Connection Issues
+
+1. **ODBC Driver not found**: Install Microsoft ODBC Driver for SQL Server (`brew install microsoft/mssql-release/msodbcsql18` on macOS)
+2. **Connection timeout**: Check firewall rules and SQL Server Browser service
+3. **Certificate errors**: Set `trust_server_certificate = True` for self-signed certificates
+4. **Authentication failed**: Verify credentials or use `trusted_connection = True` for Windows auth
+
+### PostgreSQL Connection Issues
+
+1. **psycopg2 not installed**: Install with `pip install psycopg2-binary`
+2. **Connection refused**: Check PostgreSQL is running and accepting connections
+3. **SSL errors**: Adjust `sslmode` setting (disable, allow, prefer, require)
+4. **Authentication failed**: Check pg_hba.conf allows your connection type
+
+### IBM DB2 Connection Issues
+
+1. **ibm_db not installed**: Install with `pip install ibm_db ibm_db_sa`
+2. **clidriver not found**: Set `IBM_DB_HOME` environment variable to clidriver path
+3. **Library path issues**: Add clidriver lib to `LD_LIBRARY_PATH` (Linux) or `DYLD_LIBRARY_PATH` (macOS)
+4. **SQLCODE -30081**: Network issue - check host, port, and firewall settings
+5. **SQLCODE -1060**: User/password authentication failed - verify credentials
+6. **Catalog not found**: Ensure database is cataloged or use direct connection string
 
 ### Azure OpenAI Issues
 

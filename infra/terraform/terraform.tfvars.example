@@ -1,0 +1,74 @@
+# =============================================================================
+# Example Terraform Variables
+# =============================================================================
+# Copy this file to terraform.tfvars and update with your values.
+# NEVER commit terraform.tfvars with real secrets to source control.
+# =============================================================================
+
+# -----------------------------------------------------------------------------
+# General Settings (Required)
+# -----------------------------------------------------------------------------
+resource_group_name = "dataagent-rg"
+location            = "eastus"
+base_name           = "dataagent"
+
+tags = {
+  Environment = "Development"
+  Project     = "DataAgent"
+  ManagedBy   = "Terraform"
+}
+
+# -----------------------------------------------------------------------------
+# Azure OpenAI Settings
+# -----------------------------------------------------------------------------
+openai_deployment_name = "gpt-4o"
+openai_model_name      = "gpt-4o"
+openai_model_version   = "2024-05-13"
+openai_capacity        = 10
+
+# -----------------------------------------------------------------------------
+# Oracle Database Settings
+# -----------------------------------------------------------------------------
+oracle_host         = "YOUR_ORACLE_HOST"
+oracle_port         = "1521"
+oracle_service_name = "ORCL"
+oracle_username     = "YOUR_ORACLE_USERNAME"
+oracle_password     = "YOUR_ORACLE_PASSWORD"
+
+# -----------------------------------------------------------------------------
+# Microsoft SQL Server Settings (Optional)
+# Leave empty if not using SQL Server
+# -----------------------------------------------------------------------------
+mssql_host               = ""
+mssql_port               = "1433"
+mssql_database           = ""
+mssql_username           = ""
+mssql_password           = ""
+mssql_trusted_connection = false
+
+# -----------------------------------------------------------------------------
+# PostgreSQL Settings (Optional)
+# Leave empty if not using PostgreSQL
+# -----------------------------------------------------------------------------
+postgres_host     = ""
+postgres_port     = "5432"
+postgres_database = ""
+postgres_username = ""
+postgres_password = ""
+
+# -----------------------------------------------------------------------------
+# IBM DB2 LUW Settings (Optional)
+# Leave empty if not using IBM DB2
+# -----------------------------------------------------------------------------
+ibmdb2_host     = ""
+ibmdb2_port     = "50000"
+ibmdb2_database = ""
+ibmdb2_username = ""
+ibmdb2_password = ""
+
+# -----------------------------------------------------------------------------
+# Chatbot Settings (Optional)
+# -----------------------------------------------------------------------------
+deploy_chatbot         = false
+chatbot_mcp_server_url = ""  # Leave empty to use Function App URL
+chatbot_sku            = "Free"  # "Free" or "Standard"

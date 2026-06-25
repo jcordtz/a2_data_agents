@@ -1,0 +1,24 @@
+{
+  "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentParameters.json#",
+  "contentVersion": "1.0.0.0",
+  "parameters": {
+    "baseName": {
+      "value": "dataagent-chat"
+    },
+    "location": {
+      "value": "eastus2"
+    },
+    "mcpServerUrl": {
+      "value": "https://YOUR_MCP_SERVER_URL"
+    },
+    "mcpAuthToken": {
+      "value": ""
+    },
+    "staticWebAppSku": {
+      "value": "Free"
+    },
+    "customDomain": {
+      "value": ""
+    }
+  }
+}

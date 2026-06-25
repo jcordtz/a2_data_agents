@@ -1,5 +1,11 @@
-# Oracle Database
-oracledb>=2.0.0
+# Database Drivers
+oracledb>=2.0.0        # Oracle (thick mode)
+pyodbc>=5.0.0          # SQL Server
+psycopg2-binary>=2.9.0 # PostgreSQL
+ibm_db>=3.0.0          # IBM DB2 LUW
+ibm_db_sa>=0.4.0       # IBM DB2 SQLAlchemy dialect
+
+# ORM
 sqlalchemy>=2.0.0
 
 # Data Processing

@@ -1,0 +1,9 @@
+{
+  "name": "chatbot-api",
+  "version": "1.0.0",
+  "description": "Azure Functions API for Data Agent Chatbot",
+  "main": "index.js",
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}

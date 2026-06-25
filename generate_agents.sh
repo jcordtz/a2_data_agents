@@ -24,12 +24,11 @@
 #   ./generate_agents.sh <csv_file> [options]
 #
 # CSV FORMAT:
-#   schema,table_name
-#   HR,EMPLOYEES
-#   SALES,ORDERS
+#   database_type,host,schema,table_name,purview
+#   oracle,db.example.com,HR,EMPLOYEES,yes
+#   mssql,sales-db.example.com,SALES,ORDERS,no
 #
 # OPTIONS:
-#   --config <path>      Path to oracle_config.ini (default: oracle_config.ini)
 #   --output <dir>       Output directory for generated agents (default: ./agents)
 #   --deploy             Deploy agents to Azure after generation
 #   --resource-group     Azure resource group for deployment
@@ -51,7 +50,6 @@ BLUE='\033[0;34m'
 NC='\033[0m' # No Color
 
 # Default configuration
-CONFIG_PATH="databases/oracle/oracle_config.ini"
 OUTPUT_DIR="./generated_agents"
 DEPLOY=false
 RESOURCE_GROUP=""
@@ -62,12 +60,17 @@ usage() {
     echo "Usage: $0 <csv_file> [options]"
     echo ""
     echo "Options:"
-    echo "  --config <path>        Path to oracle_config.ini (default: databases/oracle/oracle_config.ini)"
     echo "  --output <dir>         Output directory for generated agents (default: ./agents)"
     echo "  --deploy               Deploy agents to Azure after generation"
     echo "  --resource-group <rg>  Azure resource group for deployment"
     echo "  --location <loc>       Azure location (default: eastus)"
     echo "  --help                 Show this help message"
+    echo ""
+    echo "Note: Config file is automatically selected based on database_type column in CSV:"
+    echo "  oracle  -> databases/oracle/oracle_config.ini"
+    echo "  mssql   -> databases/mssql/mssql_config.ini"
+    echo "  postgres-> databases/postgres/postgres_config.ini"
+    echo "  db2     -> databases/ibmdb2/ibmdb2_config.ini"
     exit 1
 }
 
@@ -87,10 +90,6 @@ shift
 
 while [[ $# -gt 0 ]]; do
     case $1 in
-        --config)
-            CONFIG_PATH="$2"
-            shift 2
-            ;;
         --output)
             OUTPUT_DIR="$2"
             shift 2
@@ -123,11 +122,6 @@ if [ ! -f "$CSV_FILE" ]; then
     exit 1
 fi
 
-if [ ! -f "$CONFIG_PATH" ]; then
-    print_error "Config file not found: $CONFIG_PATH"
-    exit 1
-fi
-
 if [ "$DEPLOY" = true ] && [ -z "$RESOURCE_GROUP" ]; then
     print_error "Resource group required for deployment (--resource-group)"
     exit 1
@@ -139,14 +133,26 @@ if ! command -v python3 &> /dev/null; then
     exit 1
 fi
 
-# Create output directory
-mkdir -p "$OUTPUT_DIR"
+# Create output directory if it doesn't exist
+if [ ! -d "$OUTPUT_DIR" ]; then
+    print_info "Creating output directory: $OUTPUT_DIR..."
+    mkdir -p "$OUTPUT_DIR"
+else
+    # Check if output directory is not empty
+    if [ -n "$(ls -A "$OUTPUT_DIR" 2>/dev/null)" ]; then
+        print_warning "Output directory '$OUTPUT_DIR' is not empty."
+        read -p "Do you want to continue? This may overwrite existing agents. (yes/no): " CONFIRM
+        if [ "$CONFIRM" != "yes" ]; then
+            print_info "Aborted by user."
+            exit 0
+        fi
+    fi
+fi
 
 print_info "========================================"
 print_info "Table Agent Generator"
 print_info "========================================"
 print_info "CSV File: $CSV_FILE"
-print_info "Config: $CONFIG_PATH"
 print_info "Output: $OUTPUT_DIR"
 print_info "Deploy: $DEPLOY"
 print_info "========================================"
@@ -160,28 +166,87 @@ CURRENT=0
 FAILED=0
 
 # Read CSV file (skip header)
-tail -n +2 "$CSV_FILE" | while IFS=',' read -r SCHEMA TABLE_NAME || [ -n "$SCHEMA" ]; do
+tail -n +2 "$CSV_FILE" | while IFS=',' read -r DB_TYPE CSV_HOST SCHEMA TABLE_NAME PURVIEW || [ -n "$SCHEMA" ]; do
     # Skip empty lines
     if [ -z "$SCHEMA" ] || [ -z "$TABLE_NAME" ]; then
         continue
     fi
     
     # Trim whitespace
+    DB_TYPE=$(echo "$DB_TYPE" | xargs)
+    CSV_HOST=$(echo "$CSV_HOST" | xargs)
     SCHEMA=$(echo "$SCHEMA" | xargs)
     TABLE_NAME=$(echo "$TABLE_NAME" | xargs)
+    PURVIEW=$(echo "$PURVIEW" | xargs)
+    
+    # Default values
+    if [ -z "$PURVIEW" ]; then
+        PURVIEW="no"
+    fi
+    if [ -z "$DB_TYPE" ]; then
+        print_warning "Missing database type for ${SCHEMA}.${TABLE_NAME}, skipping..."
+        FAILED=$((FAILED + 1))
+        continue
+    fi
+    
+    # Set config path based on database type
+    case "$DB_TYPE" in
+        oracle)
+            CONFIG_PATH="databases/oracle/oracle_config.ini"
+            ;;
+        mssql)
+            CONFIG_PATH="databases/mssql/mssql_config.ini"
+            ;;
+        postgres)
+            CONFIG_PATH="databases/postgres/postgres_config.ini"
+            ;;
+        db2)
+            CONFIG_PATH="databases/ibmdb2/ibmdb2_config.ini"
+            ;;
+        *)
+            print_warning "Unknown database type '$DB_TYPE' for ${SCHEMA}.${TABLE_NAME}, skipping..."
+            FAILED=$((FAILED + 1))
+            continue
+            ;;
+    esac
+    
+    # Validate config file exists
+    if [ ! -f "$CONFIG_PATH" ]; then
+        print_error "Config file not found: $CONFIG_PATH"
+        FAILED=$((FAILED + 1))
+        continue
+    fi
     
     CURRENT=$((CURRENT + 1))
-    AGENT_NAME="${SCHEMA}_${TABLE_NAME}"
+    
+    # Sanitize host for use in agent name (replace dots with underscores)
+    SANITIZED_HOST=$(echo "${CSV_HOST:-localhost}" | tr '.' '_' | tr '-' '_')
+    
+    AGENT_NAME="${DB_TYPE}_${SANITIZED_HOST}_${SCHEMA}_${TABLE_NAME}"
     AGENT_DIR="${OUTPUT_DIR}/${AGENT_NAME}"
     
-    print_info "[$CURRENT] Generating agent for ${SCHEMA}.${TABLE_NAME}..."
+
+    
+    print_info "[$CURRENT] Generating agent for ${DB_TYPE}://${SCHEMA}.${TABLE_NAME} (Host: ${CSV_HOST:-default}, Config: ${CONFIG_PATH}, Purview: ${PURVIEW})..."
+    
+    # Build host argument if provided
+    HOST_ARG=""
+    if [ -n "$CSV_HOST" ]; then
+        HOST_ARG="--host $CSV_HOST"
+    fi
+    
+    # Build database type argument
+    DB_TYPE_ARG="--db-type $DB_TYPE"
     
     # Generate agent using Python
     if python3 "$(dirname "$0")/agents/agent_generator.py" \
         --config "$CONFIG_PATH" \
         --schema "$SCHEMA" \
         --table "$TABLE_NAME" \
-        --output "$AGENT_DIR"; then
+        --output "$AGENT_DIR" \
+        --purview "$PURVIEW" \
+        $HOST_ARG \
+        $DB_TYPE_ARG; then
         print_success "Created agent: $AGENT_NAME"
     else
         print_error "Failed to create agent for ${SCHEMA}.${TABLE_NAME}"

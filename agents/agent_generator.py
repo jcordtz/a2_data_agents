@@ -54,7 +54,10 @@ def generate_agent(
     config_path: str,
     schema: str,
     table_name: str,
-    output_dir: str
+    output_dir: str,
+    purview: str = "no",
+    host: Optional[str] = None,
+    db_type: str = "oracle"
 ) -> bool:
     """
     Generate a complete Azure Function agent for a specific table.
@@ -64,6 +67,9 @@ def generate_agent(
         schema: Oracle schema name
         table_name: Table name
         output_dir: Output directory for generated agent
+        purview: Whether to enable Purview integration ("yes" or "no")
+        host: Database server hostname for Purview qualified name
+        db_type: Database type (oracle, mssql, postgres, db2)
         
     Returns:
         True if successful, False otherwise
@@ -133,6 +139,24 @@ def generate_agent(
         
         # 10. Generate agent config
         generate_agent_config(output_path, config_path, schema, table_name)
+        
+        # 11. Handle Purview integration if enabled
+        if purview.lower() == "yes":
+            print(f"Purview integration enabled for {schema}.{table_name}")
+            try:
+                # Import and call the purview handler
+                from purview.purview_handler import handle_purview_integration
+                purview_result = handle_purview_integration(
+                    schema, table_name, host=host, db_type=db_type
+                )
+                if purview_result.get("success"):
+                    print(f"Purview integration completed: {purview_result.get('message')}")
+                else:
+                    print(f"Purview integration warning: {purview_result.get('message')}")
+            except ImportError as e:
+                print(f"[WARNING] Purview module not found. Skipping Purview integration: {e}")
+            except Exception as e:
+                print(f"[WARNING] Purview integration failed: {e}")
         
         print(f"Agent generated successfully in: {output_dir}")
         return True
@@ -852,6 +876,13 @@ def main():
     parser.add_argument("--schema", required=True, help="Oracle schema name")
     parser.add_argument("--table", required=True, help="Table name")
     parser.add_argument("--output", required=True, help="Output directory")
+    parser.add_argument("--purview", default="no", choices=["yes", "no"],
+                        help="Enable Purview integration (yes/no)")
+    parser.add_argument("--host", default=None,
+                        help="Database server hostname for Purview qualified name")
+    parser.add_argument("--db-type", default="oracle",
+                        choices=["oracle", "mssql", "postgres", "db2"],
+                        help="Database type (oracle, mssql, postgres, db2)")
     
     args = parser.parse_args()
     
@@ -859,7 +890,10 @@ def main():
         config_path=args.config,
         schema=args.schema,
         table_name=args.table,
-        output_dir=args.output
+        output_dir=args.output,
+        purview=args.purview,
+        host=args.host,
+        db_type=getattr(args, 'db_type', 'oracle')
     )
     
     sys.exit(0 if success else 1)

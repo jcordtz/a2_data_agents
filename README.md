@@ -38,6 +38,7 @@ An overall **chatbot interface** then orchestrates these agents through a Model 
 - **Azure Functions Deployment**: Serverless, scalable Azure hosting
 - **MCP Server Orchestration**: Unified interface for multiple agents
 - **SQLAlchemy Integration**: Robust database connectivity with connection pooling
+- **Microsoft Purview Integration**: Optional data governance with asset tracking and metadata management
 - **Infrastructure as Code**: Bicep templates for Azure deployment
 
 ---
@@ -123,6 +124,11 @@ a2_data_agents/
 │   └── infra/                     # MCP infrastructure
 │       ├── main.bicep             # Container Apps + ACR + Storage
 │       └── main.parameters.json   # Deployment parameters
+│
+├── purview/                       # Microsoft Purview Integration
+│   ├── __init__.py                # Module exports
+│   ├── purview_handler.py         # Purview Data Governance client
+│   └── purview_config.ini         # Purview configuration
 │
 ├── chatbot/                       # Chatbot Web Interface
 │   ├── src/                       # React source code
@@ -353,10 +359,20 @@ python agents/agent_generator.py \
   --config databases/oracle/oracle_config.ini \
   --schema HR \
   --table EMPLOYEES \
-  --output ./generated_agents/hr_employees
+  --output ./generated_agents/hr_employees \
+  --purview yes \
+  --host db.example.com \
+  --db-type oracle
 
 # Generate multiple agents from CSV
+# CSV format: database_type,host,schema,table_name,purview
 ./generate_agents.sh sample_tables.csv --output ./generated_agents
+
+# The config file is automatically selected based on database_type:
+#   oracle   -> databases/oracle/oracle_config.ini
+#   mssql    -> databases/mssql/mssql_config.ini
+#   postgres -> databases/postgres/postgres_config.ini
+#   db2      -> databases/ibmdb2/ibmdb2_config.ini
 ```
 
 ### Deploy to Azure
@@ -461,6 +477,7 @@ az deployment group create \
 | **Data Agent** | Azure OpenAI-powered agent for natural language to SQL translation | See docstrings in [agents/data_agent.py](agents/data_agent.py) |
 | **Function App** | Azure Function HTTP endpoints for the data agent | See docstrings in [agents/function_app.py](agents/function_app.py) |
 | **Agent Generator** | Generates standalone Azure Function agents for specific tables | See docstrings in [agents/agent_generator.py](agents/agent_generator.py) |
+| **Purview Handler** | Microsoft Purview Data Governance integration for asset management and metadata | See docstrings in [purview/purview_handler.py](purview/purview_handler.py) |
 | **MCP Server** | FastAPI-based Model Context Protocol server | See [mcp/README.md](mcp/README.md) |
 | **Chatbot Interface** | React-based web UI for querying data through MCP server | See [chatbot/README.md](chatbot/README.md) |
 
@@ -528,6 +545,27 @@ temperature = 0.7         # Response creativity (0-1)
 host = localhost
 port = 1521
 service_name = ORCL
+```
+
+### Purview Configuration (`purview/purview_config.ini`)
+
+```ini
+[purview]
+account_name = your-purview-account   # Microsoft Purview account name
+endpoint =                             # Optional: explicit endpoint URL
+tenant_id = your-tenant-id             # Azure AD tenant ID
+client_id = your-client-id             # Service principal client ID
+client_secret = your-client-secret     # Service principal client secret
+auth_method = service_principal        # Auth: service_principal or default_credential
+
+[database]
+server_host =                          # Default database host (can override per-agent)
+server_port =                          # Default database port
+
+[options]
+auto_create_assets = true              # Auto-create assets if not found
+add_classifications = true             # Add classifications to assets
+default_classifications =              # Comma-separated default classifications
 ```
 
 ### MCP Server Environment Variables
@@ -766,18 +804,23 @@ chmod +x deploy.sh
 Create individual agents for specific tables using the generator:
 
 ```bash
-# Create a CSV with schema and table names
+# Create a CSV with database_type, host, schema, table_name, and purview columns
 cat > tables.csv << EOF
-schema,table_name
-HR,EMPLOYEES
-SALES,ORDERS
+database_type,host,schema,table_name,purview
+oracle,db.example.com,HR,EMPLOYEES,yes
+mssql,sqlserver.example.com,HR,DEPARTMENTS,no
+postgres,pghost.example.com,SALES,ORDERS,yes
+db2,db2host.example.com,ANALYTICS,REPORTS,no
 EOF
 
-# Generate agents
+# Generate agents (config is automatically selected based on database_type)
 ./generate_agents.sh tables.csv --output ./generated_agents
 
 # Generate and deploy
 ./generate_agents.sh tables.csv --deploy --resource-group mygroup
+
+# Note: If the output directory exists and is not empty, you will be
+# prompted to confirm before continuing.
 ```
 
 ## API Endpoints

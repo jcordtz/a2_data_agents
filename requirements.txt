@@ -17,5 +17,10 @@ azure-functions>=1.17.0
 # Azure OpenAI
 openai>=1.12.0
 
+# Azure Purview Data Governance
+azure-identity>=1.15.0
+azure-purview-catalog>=1.0.0b4
+azure-purview-scanning>=1.0.0b2
+
 # Optional: For local development
 python-dotenv>=1.0.0

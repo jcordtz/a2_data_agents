@@ -4,6 +4,33 @@
 // Deploys the Data Agent Azure Function with supporting resources.
 //
 // =============================================================================
+// PREREQUISITES (Must exist before deployment)
+// =============================================================================
+// This infrastructure assumes the following resources ALREADY EXIST and are
+// accessible from the deployed Azure Function:
+//
+// 1. KEY VAULT with database secrets:
+//    The following secrets must be pre-configured in the Key Vault:
+//    - Oracle: oracle-host, oracle-username, oracle-password
+//    - MSSQL: mssql-host, mssql-username, mssql-password
+//    - PostgreSQL: postgres-host, postgres-username, postgres-password
+//    - IBM DB2: ibmdb2-host, ibmdb2-username, ibmdb2-password
+//
+// 2. DATABASE(S) - At least one of the following must be accessible:
+//    - Oracle Database (on-premises or cloud)
+//    - Microsoft SQL Server (on-premises, Azure SQL, or VM)
+//    - PostgreSQL (on-premises, Azure Database for PostgreSQL, or VM)
+//    - IBM DB2 LUW (on-premises or cloud)
+//
+// 3. MICROSOFT PURVIEW (required for Purview integration):
+//    - Microsoft Purview account with Data Catalog enabled
+//    - Service principal with appropriate permissions
+//    - Tables registered as data assets in Purview
+//
+// This template does NOT create Key Vault, secrets, databases, or Purview.
+// It deploys the application and grants it access to the existing Key Vault.
+//
+// =============================================================================
 // DISCLAIMER
 // =============================================================================
 // This code was generated with AI assistance (AI-generated code).
@@ -31,91 +58,49 @@ param location string = resourceGroup().location
 param openAIDeploymentName string = 'gpt-4o'
 
 // =============================================================================
-// Oracle Database Parameters
+// Existing Key Vault (Required)
 // =============================================================================
-@description('Oracle database host')
-@secure()
-param oracleHost string = ''
+@description('Name of the existing Key Vault containing database secrets')
+param keyVaultName string
 
+// =============================================================================
+// Oracle Database Connection Parameters
+// =============================================================================
 @description('Oracle database port')
 param oraclePort string = '1521'
 
 @description('Oracle service name')
 param oracleServiceName string = ''
 
-@description('Oracle username')
-@secure()
-param oracleUsername string = ''
-
-@description('Oracle password')
-@secure()
-param oraclePassword string = ''
-
 // =============================================================================
-// Microsoft SQL Server Parameters
+// Microsoft SQL Server Connection Parameters
 // =============================================================================
-@description('SQL Server database host')
-@secure()
-param mssqlHost string = ''
-
 @description('SQL Server database port')
 param mssqlPort string = '1433'
 
 @description('SQL Server database name')
 param mssqlDatabase string = ''
 
-@description('SQL Server username')
-@secure()
-param mssqlUsername string = ''
-
-@description('SQL Server password')
-@secure()
-param mssqlPassword string = ''
-
 @description('Use Windows/Integrated authentication for SQL Server')
 param mssqlTrustedConnection bool = false
 
 // =============================================================================
-// PostgreSQL Parameters
+// PostgreSQL Connection Parameters
 // =============================================================================
-@description('PostgreSQL database host')
-@secure()
-param postgresHost string = ''
-
 @description('PostgreSQL database port')
 param postgresPort string = '5432'
 
 @description('PostgreSQL database name')
 param postgresDatabase string = ''
 
-@description('PostgreSQL username')
-@secure()
-param postgresUsername string = ''
-
-@description('PostgreSQL password')
-@secure()
-param postgresPassword string = ''
-
 // =============================================================================
-// IBM DB2 LUW Parameters
+// IBM DB2 LUW Connection Parameters
 // =============================================================================
-@description('IBM DB2 database host')
-@secure()
-param ibmdb2Host string = ''
-
 @description('IBM DB2 database port')
 param ibmdb2Port string = '50000'
 
 @description('IBM DB2 database name')
 param ibmdb2Database string = ''
-
-@description('IBM DB2 username')
-@secure()
-param ibmdb2Username string = ''
-
-@description('IBM DB2 password')
-@secure()
-param ibmdb2Password string = ''
 
 // =============================================================================
 // Chatbot Parameters
@@ -136,7 +121,11 @@ var storageAccountName = '${baseName}st${uniqueString(resourceGroup().id)}'
 var appServicePlanName = '${baseName}-plan'
 var appInsightsName = '${baseName}-insights'
 var openAIName = '${baseName}-openai-${uniqueString(resourceGroup().id)}'
-var keyVaultName = '${baseName}-kv-${uniqueString(resourceGroup().id)}'
+
+// Reference existing Key Vault
+resource keyVault 'Microsoft.KeyVault/vaults@2023-07-01' existing = {
+  name: keyVaultName
+}
 
 // Storage Account for Function App
 resource storageAccount 'Microsoft.Storage/storageAccounts@2023-01-01' = {
@@ -207,123 +196,6 @@ resource openAIDeployment 'Microsoft.CognitiveServices/accounts/deployments@2023
   }
 }
 
-// Key Vault for secrets
-resource keyVault 'Microsoft.KeyVault/vaults@2023-07-01' = {
-  name: take(keyVaultName, 24)
-  location: location
-  properties: {
-    sku: {
-      family: 'A'
-      name: 'standard'
-    }
-    tenantId: subscription().tenantId
-    accessPolicies: []
-    enableRbacAuthorization: true
-    enableSoftDelete: true
-    softDeleteRetentionInDays: 7
-  }
-}
-
-// Store Oracle credentials in Key Vault
-resource oraclePasswordSecret 'Microsoft.KeyVault/vaults/secrets@2023-07-01' = {
-  parent: keyVault
-  name: 'oracle-password'
-  properties: {
-    value: oraclePassword
-  }
-}
-
-resource oracleUsernameSecret 'Microsoft.KeyVault/vaults/secrets@2023-07-01' = {
-  parent: keyVault
-  name: 'oracle-username'
-  properties: {
-    value: oracleUsername
-  }
-}
-
-resource oracleHostSecret 'Microsoft.KeyVault/vaults/secrets@2023-07-01' = {
-  parent: keyVault
-  name: 'oracle-host'
-  properties: {
-    value: oracleHost
-  }
-}
-
-// Store MSSQL credentials in Key Vault
-resource mssqlPasswordSecret 'Microsoft.KeyVault/vaults/secrets@2023-07-01' = if (!empty(mssqlPassword)) {
-  parent: keyVault
-  name: 'mssql-password'
-  properties: {
-    value: mssqlPassword
-  }
-}
-
-resource mssqlUsernameSecret 'Microsoft.KeyVault/vaults/secrets@2023-07-01' = if (!empty(mssqlUsername)) {
-  parent: keyVault
-  name: 'mssql-username'
-  properties: {
-    value: mssqlUsername
-  }
-}
-
-resource mssqlHostSecret 'Microsoft.KeyVault/vaults/secrets@2023-07-01' = if (!empty(mssqlHost)) {
-  parent: keyVault
-  name: 'mssql-host'
-  properties: {
-    value: mssqlHost
-  }
-}
-
-// Store PostgreSQL credentials in Key Vault
-resource postgresPasswordSecret 'Microsoft.KeyVault/vaults/secrets@2023-07-01' = if (!empty(postgresPassword)) {
-  parent: keyVault
-  name: 'postgres-password'
-  properties: {
-    value: postgresPassword
-  }
-}
-
-resource postgresUsernameSecret 'Microsoft.KeyVault/vaults/secrets@2023-07-01' = if (!empty(postgresUsername)) {
-  parent: keyVault
-  name: 'postgres-username'
-  properties: {
-    value: postgresUsername
-  }
-}
-
-resource postgresHostSecret 'Microsoft.KeyVault/vaults/secrets@2023-07-01' = if (!empty(postgresHost)) {
-  parent: keyVault
-  name: 'postgres-host'
-  properties: {
-    value: postgresHost
-  }
-}
-
-// Store IBM DB2 credentials in Key Vault
-resource ibmdb2PasswordSecret 'Microsoft.KeyVault/vaults/secrets@2023-07-01' = if (!empty(ibmdb2Password)) {
-  parent: keyVault
-  name: 'ibmdb2-password'
-  properties: {
-    value: ibmdb2Password
-  }
-}
-
-resource ibmdb2UsernameSecret 'Microsoft.KeyVault/vaults/secrets@2023-07-01' = if (!empty(ibmdb2Username)) {
-  parent: keyVault
-  name: 'ibmdb2-username'
-  properties: {
-    value: ibmdb2Username
-  }
-}
-
-resource ibmdb2HostSecret 'Microsoft.KeyVault/vaults/secrets@2023-07-01' = if (!empty(ibmdb2Host)) {
-  parent: keyVault
-  name: 'ibmdb2-host'
-  properties: {
-    value: ibmdb2Host
-  }
-}
-
 // Function App
 resource functionApp 'Microsoft.Web/sites@2023-01-01' = {
   name: functionAppName
@@ -370,9 +242,10 @@ resource functionApp 'Microsoft.Web/sites@2023-01-01' = {
           name: 'AZURE_OPENAI_DEPLOYMENT'
           value: openAIDeploymentName
         }
+        // Oracle Configuration (secrets from existing Key Vault)
         {
           name: 'ORACLE_HOST'
-          value: '@Microsoft.KeyVault(VaultName=${keyVault.name};SecretName=oracle-host)'
+          value: '@Microsoft.KeyVault(VaultName=${keyVaultName};SecretName=oracle-host)'
         }
         {
           name: 'ORACLE_PORT'
@@ -384,16 +257,16 @@ resource functionApp 'Microsoft.Web/sites@2023-01-01' = {
         }
         {
           name: 'ORACLE_USERNAME'
-          value: '@Microsoft.KeyVault(VaultName=${keyVault.name};SecretName=oracle-username)'
+          value: '@Microsoft.KeyVault(VaultName=${keyVaultName};SecretName=oracle-username)'
         }
         {
           name: 'ORACLE_PASSWORD'
-          value: '@Microsoft.KeyVault(VaultName=${keyVault.name};SecretName=oracle-password)'
+          value: '@Microsoft.KeyVault(VaultName=${keyVaultName};SecretName=oracle-password)'
         }
-        // MSSQL Configuration
+        // MSSQL Configuration (secrets from existing Key Vault)
         {
           name: 'MSSQL_HOST'
-          value: !empty(mssqlHost) ? '@Microsoft.KeyVault(VaultName=${keyVault.name};SecretName=mssql-host)' : ''
+          value: '@Microsoft.KeyVault(VaultName=${keyVaultName};SecretName=mssql-host)'
         }
         {
           name: 'MSSQL_PORT'
@@ -405,20 +278,20 @@ resource functionApp 'Microsoft.Web/sites@2023-01-01' = {
         }
         {
           name: 'MSSQL_USERNAME'
-          value: !empty(mssqlUsername) ? '@Microsoft.KeyVault(VaultName=${keyVault.name};SecretName=mssql-username)' : ''
+          value: '@Microsoft.KeyVault(VaultName=${keyVaultName};SecretName=mssql-username)'
         }
         {
           name: 'MSSQL_PASSWORD'
-          value: !empty(mssqlPassword) ? '@Microsoft.KeyVault(VaultName=${keyVault.name};SecretName=mssql-password)' : ''
+          value: '@Microsoft.KeyVault(VaultName=${keyVaultName};SecretName=mssql-password)'
         }
         {
           name: 'MSSQL_TRUSTED_CONNECTION'
           value: string(mssqlTrustedConnection)
         }
-        // PostgreSQL Configuration
+        // PostgreSQL Configuration (secrets from existing Key Vault)
         {
           name: 'POSTGRES_HOST'
-          value: !empty(postgresHost) ? '@Microsoft.KeyVault(VaultName=${keyVault.name};SecretName=postgres-host)' : ''
+          value: '@Microsoft.KeyVault(VaultName=${keyVaultName};SecretName=postgres-host)'
         }
         {
           name: 'POSTGRES_PORT'
@@ -430,16 +303,16 @@ resource functionApp 'Microsoft.Web/sites@2023-01-01' = {
         }
         {
           name: 'POSTGRES_USERNAME'
-          value: !empty(postgresUsername) ? '@Microsoft.KeyVault(VaultName=${keyVault.name};SecretName=postgres-username)' : ''
+          value: '@Microsoft.KeyVault(VaultName=${keyVaultName};SecretName=postgres-username)'
         }
         {
           name: 'POSTGRES_PASSWORD'
-          value: !empty(postgresPassword) ? '@Microsoft.KeyVault(VaultName=${keyVault.name};SecretName=postgres-password)' : ''
+          value: '@Microsoft.KeyVault(VaultName=${keyVaultName};SecretName=postgres-password)'
         }
-        // IBM DB2 Configuration
+        // IBM DB2 Configuration (secrets from existing Key Vault)
         {
           name: 'IBMDB2_HOST'
-          value: !empty(ibmdb2Host) ? '@Microsoft.KeyVault(VaultName=${keyVault.name};SecretName=ibmdb2-host)' : ''
+          value: '@Microsoft.KeyVault(VaultName=${keyVaultName};SecretName=ibmdb2-host)'
         }
         {
           name: 'IBMDB2_PORT'
@@ -451,11 +324,11 @@ resource functionApp 'Microsoft.Web/sites@2023-01-01' = {
         }
         {
           name: 'IBMDB2_USERNAME'
-          value: !empty(ibmdb2Username) ? '@Microsoft.KeyVault(VaultName=${keyVault.name};SecretName=ibmdb2-username)' : ''
+          value: '@Microsoft.KeyVault(VaultName=${keyVaultName};SecretName=ibmdb2-username)'
         }
         {
           name: 'IBMDB2_PASSWORD'
-          value: !empty(ibmdb2Password) ? '@Microsoft.KeyVault(VaultName=${keyVault.name};SecretName=ibmdb2-password)' : ''
+          value: '@Microsoft.KeyVault(VaultName=${keyVaultName};SecretName=ibmdb2-password)'
         }
       ]
       cors: {
@@ -468,7 +341,7 @@ resource functionApp 'Microsoft.Web/sites@2023-01-01' = {
   }
 }
 
-// Key Vault access for Function App
+// Key Vault access for Function App (grant access to existing Key Vault)
 resource keyVaultAccessPolicy 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
   name: guid(keyVault.id, functionApp.id, 'Key Vault Secrets User')
   scope: keyVault
@@ -520,7 +393,7 @@ resource chatbotStaticWebAppSettings 'Microsoft.Web/staticSites/config@2023-01-0
 output functionAppName string = functionApp.name
 output functionAppUrl string = 'https://${functionApp.properties.defaultHostName}'
 output openAIEndpoint string = openAI.properties.endpoint
-output keyVaultName string = keyVault.name
+output keyVaultNameUsed string = keyVaultName
 output chatbotStaticWebAppName string = deployChatbot ? chatbotStaticWebApp.name : ''
 
 // Note: To get the chatbot URL and deployment token after deployment, run:

@@ -2,7 +2,16 @@
 # Example Terraform Variables
 # =============================================================================
 # Copy this file to terraform.tfvars and update with your values.
-# NEVER commit terraform.tfvars with real secrets to source control.
+#
+# PREREQUISITES:
+# 1. An existing Key Vault with the following secrets configured:
+#    - Oracle: oracle-host, oracle-username, oracle-password
+#    - MSSQL: mssql-host, mssql-username, mssql-password
+#    - PostgreSQL: postgres-host, postgres-username, postgres-password
+#    - IBM DB2: ibmdb2-host, ibmdb2-username, ibmdb2-password
+#
+# 2. Existing databases accessible from Azure
+# 3. Microsoft Purview (if using Purview integration)
 # =============================================================================
 
 # -----------------------------------------------------------------------------
@@ -19,6 +28,15 @@ tags = {
 }
 
 # -----------------------------------------------------------------------------
+# Existing Key Vault (Required)
+# -----------------------------------------------------------------------------
+# Name of the Key Vault containing database secrets
+key_vault_name = "YOUR_KEY_VAULT_NAME"
+
+# Resource group of the Key Vault (leave empty if same as resource_group_name)
+key_vault_resource_group = ""
+
+# -----------------------------------------------------------------------------
 # Azure OpenAI Settings
 # -----------------------------------------------------------------------------
 openai_deployment_name = "gpt-4o"
@@ -28,43 +46,32 @@ openai_capacity        = 10
 
 # -----------------------------------------------------------------------------
 # Oracle Database Settings
+# (host, username, password come from Key Vault secrets)
 # -----------------------------------------------------------------------------
-oracle_host         = "YOUR_ORACLE_HOST"
 oracle_port         = "1521"
 oracle_service_name = "ORCL"
-oracle_username     = "YOUR_ORACLE_USERNAME"
-oracle_password     = "YOUR_ORACLE_PASSWORD"
 
 # -----------------------------------------------------------------------------
-# Microsoft SQL Server Settings (Optional)
-# Leave empty if not using SQL Server
+# Microsoft SQL Server Settings
+# (host, username, password come from Key Vault secrets)
 # -----------------------------------------------------------------------------
-mssql_host               = ""
 mssql_port               = "1433"
 mssql_database           = ""
-mssql_username           = ""
-mssql_password           = ""
 mssql_trusted_connection = false
 
 # -----------------------------------------------------------------------------
-# PostgreSQL Settings (Optional)
-# Leave empty if not using PostgreSQL
+# PostgreSQL Settings
+# (host, username, password come from Key Vault secrets)
 # -----------------------------------------------------------------------------
-postgres_host     = ""
 postgres_port     = "5432"
 postgres_database = ""
-postgres_username = ""
-postgres_password = ""
 
 # -----------------------------------------------------------------------------
-# IBM DB2 LUW Settings (Optional)
-# Leave empty if not using IBM DB2
+# IBM DB2 LUW Settings
+# (host, username, password come from Key Vault secrets)
 # -----------------------------------------------------------------------------
-ibmdb2_host     = ""
 ibmdb2_port     = "50000"
 ibmdb2_database = ""
-ibmdb2_username = ""
-ibmdb2_password = ""
 
 # -----------------------------------------------------------------------------
 # Chatbot Settings (Optional)

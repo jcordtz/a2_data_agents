@@ -1,11 +1,46 @@
 # =============================================================================
 # Main Infrastructure Configuration
 # =============================================================================
+#
+# =============================================================================
+# PREREQUISITES (Must exist before deployment)
+# =============================================================================
+# This infrastructure assumes the following resources ALREADY EXIST and are
+# accessible from the deployed Azure Function:
+#
+# 1. KEY VAULT with database secrets:
+#    The following secrets must be pre-configured in the Key Vault:
+#    - Oracle: oracle-host, oracle-username, oracle-password
+#    - MSSQL: mssql-host, mssql-username, mssql-password
+#    - PostgreSQL: postgres-host, postgres-username, postgres-password
+#    - IBM DB2: ibmdb2-host, ibmdb2-username, ibmdb2-password
+#
+# 2. DATABASE(S) - At least one of the following must be accessible:
+#    - Oracle Database (on-premises or cloud)
+#    - Microsoft SQL Server (on-premises, Azure SQL, or VM)
+#    - PostgreSQL (on-premises, Azure Database for PostgreSQL, or VM)
+#    - IBM DB2 LUW (on-premises or cloud)
+#
+# 3. MICROSOFT PURVIEW (required for Purview integration):
+#    - Microsoft Purview account with Data Catalog enabled
+#    - Service principal with appropriate permissions
+#    - Tables registered as data assets in Purview
+#
+# This Terraform configuration does NOT create Key Vault, secrets, databases,
+# or Purview. It deploys the application and grants it access to existing
+# Key Vault secrets.
+# =============================================================================
 
 data "azurerm_client_config" "current" {}
 
 data "azurerm_resource_group" "main" {
   name = var.resource_group_name
+}
+
+# Reference existing Key Vault
+data "azurerm_key_vault" "main" {
+  name                = var.key_vault_name
+  resource_group_name = var.key_vault_resource_group != "" ? var.key_vault_resource_group : var.resource_group_name
 }
 
 # Random suffix for globally unique names
@@ -23,7 +58,6 @@ locals {
   app_service_plan_name       = "${var.base_name}-plan"
   app_insights_name           = "${var.base_name}-insights"
   openai_name                 = "${var.base_name}-openai-${local.suffix}"
-  key_vault_name              = substr("${var.base_name}-kv-${local.suffix}", 0, 24)
   chatbot_static_web_app_name = "${var.base_name}-chat-swa-${local.suffix}"
 }
 
@@ -108,146 +142,6 @@ resource "azurerm_cognitive_deployment" "gpt" {
 }
 
 # =============================================================================
-# Key Vault
-# =============================================================================
-resource "azurerm_key_vault" "main" {
-  name                       = local.key_vault_name
-  resource_group_name        = data.azurerm_resource_group.main.name
-  location                   = var.location
-  tenant_id                  = data.azurerm_client_config.current.tenant_id
-  sku_name                   = "standard"
-  soft_delete_retention_days = 7
-  enable_rbac_authorization  = true
-
-  tags = var.tags
-}
-
-# Oracle secrets
-resource "azurerm_key_vault_secret" "oracle_password" {
-  name         = "oracle-password"
-  value        = var.oracle_password
-  key_vault_id = azurerm_key_vault.main.id
-
-  depends_on = [azurerm_role_assignment.terraform_kv_admin]
-}
-
-resource "azurerm_key_vault_secret" "oracle_username" {
-  name         = "oracle-username"
-  value        = var.oracle_username
-  key_vault_id = azurerm_key_vault.main.id
-
-  depends_on = [azurerm_role_assignment.terraform_kv_admin]
-}
-
-resource "azurerm_key_vault_secret" "oracle_host" {
-  name         = "oracle-host"
-  value        = var.oracle_host
-  key_vault_id = azurerm_key_vault.main.id
-
-  depends_on = [azurerm_role_assignment.terraform_kv_admin]
-}
-
-# MSSQL secrets (conditional)
-resource "azurerm_key_vault_secret" "mssql_password" {
-  count = var.mssql_password != "" ? 1 : 0
-
-  name         = "mssql-password"
-  value        = var.mssql_password
-  key_vault_id = azurerm_key_vault.main.id
-
-  depends_on = [azurerm_role_assignment.terraform_kv_admin]
-}
-
-resource "azurerm_key_vault_secret" "mssql_username" {
-  count = var.mssql_username != "" ? 1 : 0
-
-  name         = "mssql-username"
-  value        = var.mssql_username
-  key_vault_id = azurerm_key_vault.main.id
-
-  depends_on = [azurerm_role_assignment.terraform_kv_admin]
-}
-
-resource "azurerm_key_vault_secret" "mssql_host" {
-  count = var.mssql_host != "" ? 1 : 0
-
-  name         = "mssql-host"
-  value        = var.mssql_host
-  key_vault_id = azurerm_key_vault.main.id
-
-  depends_on = [azurerm_role_assignment.terraform_kv_admin]
-}
-
-# PostgreSQL secrets (conditional)
-resource "azurerm_key_vault_secret" "postgres_password" {
-  count = var.postgres_password != "" ? 1 : 0
-
-  name         = "postgres-password"
-  value        = var.postgres_password
-  key_vault_id = azurerm_key_vault.main.id
-
-  depends_on = [azurerm_role_assignment.terraform_kv_admin]
-}
-
-resource "azurerm_key_vault_secret" "postgres_username" {
-  count = var.postgres_username != "" ? 1 : 0
-
-  name         = "postgres-username"
-  value        = var.postgres_username
-  key_vault_id = azurerm_key_vault.main.id
-
-  depends_on = [azurerm_role_assignment.terraform_kv_admin]
-}
-
-resource "azurerm_key_vault_secret" "postgres_host" {
-  count = var.postgres_host != "" ? 1 : 0
-
-  name         = "postgres-host"
-  value        = var.postgres_host
-  key_vault_id = azurerm_key_vault.main.id
-
-  depends_on = [azurerm_role_assignment.terraform_kv_admin]
-}
-
-# IBM DB2 secrets (conditional)
-resource "azurerm_key_vault_secret" "ibmdb2_password" {
-  count = var.ibmdb2_password != "" ? 1 : 0
-
-  name         = "ibmdb2-password"
-  value        = var.ibmdb2_password
-  key_vault_id = azurerm_key_vault.main.id
-
-  depends_on = [azurerm_role_assignment.terraform_kv_admin]
-}
-
-resource "azurerm_key_vault_secret" "ibmdb2_username" {
-  count = var.ibmdb2_username != "" ? 1 : 0
-
-  name         = "ibmdb2-username"
-  value        = var.ibmdb2_username
-  key_vault_id = azurerm_key_vault.main.id
-
-  depends_on = [azurerm_role_assignment.terraform_kv_admin]
-}
-
-resource "azurerm_key_vault_secret" "ibmdb2_host" {
-  count = var.ibmdb2_host != "" ? 1 : 0
-
-  name         = "ibmdb2-host"
-  value        = var.ibmdb2_host
-  key_vault_id = azurerm_key_vault.main.id
-
-  depends_on = [azurerm_role_assignment.terraform_kv_admin]
-}
-
-# Role assignment for Terraform to manage Key Vault secrets
-resource "azurerm_role_assignment" "terraform_kv_admin" {
-  scope                = azurerm_key_vault.main.id
-  role_definition_name = "Key Vault Administrator"
-  principal_id         = data.azurerm_client_config.current.object_id
-}
-
-# =============================================================================
 # Function App
 # =============================================================================
 resource "azurerm_linux_function_app" "main" {
@@ -281,34 +175,34 @@ resource "azurerm_linux_function_app" "main" {
     AZURE_OPENAI_API_KEY                  = azurerm_cognitive_account.openai.primary_access_key
     AZURE_OPENAI_DEPLOYMENT               = var.openai_deployment_name
 
-    # Oracle Configuration
-    ORACLE_HOST         = "@Microsoft.KeyVault(VaultName=${azurerm_key_vault.main.name};SecretName=oracle-host)"
+    # Oracle Configuration (secrets from existing Key Vault)
+    ORACLE_HOST         = "@Microsoft.KeyVault(VaultName=${data.azurerm_key_vault.main.name};SecretName=oracle-host)"
     ORACLE_PORT         = var.oracle_port
     ORACLE_SERVICE_NAME = var.oracle_service_name
-    ORACLE_USERNAME     = "@Microsoft.KeyVault(VaultName=${azurerm_key_vault.main.name};SecretName=oracle-username)"
-    ORACLE_PASSWORD     = "@Microsoft.KeyVault(VaultName=${azurerm_key_vault.main.name};SecretName=oracle-password)"
+    ORACLE_USERNAME     = "@Microsoft.KeyVault(VaultName=${data.azurerm_key_vault.main.name};SecretName=oracle-username)"
+    ORACLE_PASSWORD     = "@Microsoft.KeyVault(VaultName=${data.azurerm_key_vault.main.name};SecretName=oracle-password)"
 
-    # MSSQL Configuration
-    MSSQL_HOST               = var.mssql_host != "" ? "@Microsoft.KeyVault(VaultName=${azurerm_key_vault.main.name};SecretName=mssql-host)" : ""
+    # MSSQL Configuration (secrets from existing Key Vault)
+    MSSQL_HOST               = "@Microsoft.KeyVault(VaultName=${data.azurerm_key_vault.main.name};SecretName=mssql-host)"
     MSSQL_PORT               = var.mssql_port
     MSSQL_DATABASE           = var.mssql_database
-    MSSQL_USERNAME           = var.mssql_username != "" ? "@Microsoft.KeyVault(VaultName=${azurerm_key_vault.main.name};SecretName=mssql-username)" : ""
-    MSSQL_PASSWORD           = var.mssql_password != "" ? "@Microsoft.KeyVault(VaultName=${azurerm_key_vault.main.name};SecretName=mssql-password)" : ""
+    MSSQL_USERNAME           = "@Microsoft.KeyVault(VaultName=${data.azurerm_key_vault.main.name};SecretName=mssql-username)"
+    MSSQL_PASSWORD           = "@Microsoft.KeyVault(VaultName=${data.azurerm_key_vault.main.name};SecretName=mssql-password)"
     MSSQL_TRUSTED_CONNECTION = tostring(var.mssql_trusted_connection)
 
-    # PostgreSQL Configuration
-    POSTGRES_HOST     = var.postgres_host != "" ? "@Microsoft.KeyVault(VaultName=${azurerm_key_vault.main.name};SecretName=postgres-host)" : ""
+    # PostgreSQL Configuration (secrets from existing Key Vault)
+    POSTGRES_HOST     = "@Microsoft.KeyVault(VaultName=${data.azurerm_key_vault.main.name};SecretName=postgres-host)"
     POSTGRES_PORT     = var.postgres_port
     POSTGRES_DATABASE = var.postgres_database
-    POSTGRES_USERNAME = var.postgres_username != "" ? "@Microsoft.KeyVault(VaultName=${azurerm_key_vault.main.name};SecretName=postgres-username)" : ""
-    POSTGRES_PASSWORD = var.postgres_password != "" ? "@Microsoft.KeyVault(VaultName=${azurerm_key_vault.main.name};SecretName=postgres-password)" : ""
+    POSTGRES_USERNAME = "@Microsoft.KeyVault(VaultName=${data.azurerm_key_vault.main.name};SecretName=postgres-username)"
+    POSTGRES_PASSWORD = "@Microsoft.KeyVault(VaultName=${data.azurerm_key_vault.main.name};SecretName=postgres-password)"
 
-    # IBM DB2 Configuration
-    IBMDB2_HOST     = var.ibmdb2_host != "" ? "@Microsoft.KeyVault(VaultName=${azurerm_key_vault.main.name};SecretName=ibmdb2-host)" : ""
+    # IBM DB2 Configuration (secrets from existing Key Vault)
+    IBMDB2_HOST     = "@Microsoft.KeyVault(VaultName=${data.azurerm_key_vault.main.name};SecretName=ibmdb2-host)"
     IBMDB2_PORT     = var.ibmdb2_port
     IBMDB2_DATABASE = var.ibmdb2_database
-    IBMDB2_USERNAME = var.ibmdb2_username != "" ? "@Microsoft.KeyVault(VaultName=${azurerm_key_vault.main.name};SecretName=ibmdb2-username)" : ""
-    IBMDB2_PASSWORD = var.ibmdb2_password != "" ? "@Microsoft.KeyVault(VaultName=${azurerm_key_vault.main.name};SecretName=ibmdb2-password)" : ""
+    IBMDB2_USERNAME = "@Microsoft.KeyVault(VaultName=${data.azurerm_key_vault.main.name};SecretName=ibmdb2-username)"
+    IBMDB2_PASSWORD = "@Microsoft.KeyVault(VaultName=${data.azurerm_key_vault.main.name};SecretName=ibmdb2-password)"
   }
 
   https_only = true
@@ -316,9 +210,9 @@ resource "azurerm_linux_function_app" "main" {
   tags = var.tags
 }
 
-# Key Vault access for Function App
+# Key Vault access for Function App (grant access to existing Key Vault)
 resource "azurerm_role_assignment" "function_kv_secrets" {
-  scope                = azurerm_key_vault.main.id
+  scope                = data.azurerm_key_vault.main.id
   role_definition_name = "Key Vault Secrets User"
   principal_id         = azurerm_linux_function_app.main.identity[0].principal_id
 }

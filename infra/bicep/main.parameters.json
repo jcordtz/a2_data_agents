@@ -1,6 +1,7 @@
 {
   "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentParameters.json#",
   "contentVersion": "1.0.0.0",
+  "_comment": "PREREQUISITES: An existing Key Vault with database secrets (oracle-host, oracle-username, oracle-password, mssql-*, postgres-*, ibmdb2-*), existing databases, and Microsoft Purview (if using Purview integration).",
   "parameters": {
     "baseName": {
       "value": "dataagent"
@@ -11,8 +12,8 @@
     "openAIDeploymentName": {
       "value": "gpt-4o"
     },
-    "oracleHost": {
-      "value": "YOUR_ORACLE_HOST"
+    "keyVaultName": {
+      "value": "YOUR_KEY_VAULT_NAME"
     },
     "oraclePort": {
       "value": "1521"
@@ -20,32 +21,14 @@
     "oracleServiceName": {
       "value": "ORCL"
     },
-    "oracleUsername": {
-      "value": "YOUR_ORACLE_USERNAME"
-    },
-    "oraclePassword": {
-      "value": "YOUR_ORACLE_PASSWORD"
-    },
-    "mssqlHost": {
-      "value": ""
-    },
     "mssqlPort": {
       "value": "1433"
     },
     "mssqlDatabase": {
       "value": ""
     },
-    "mssqlUsername": {
-      "value": ""
-    },
-    "mssqlPassword": {
-      "value": ""
-    },
     "mssqlTrustedConnection": {
       "value": false
-    },
-    "postgresHost": {
-      "value": ""
     },
     "postgresPort": {
       "value": "5432"
@@ -53,25 +36,10 @@
     "postgresDatabase": {
       "value": ""
     },
-    "postgresUsername": {
-      "value": ""
-    },
-    "postgresPassword": {
-      "value": ""
-    },
-    "ibmdb2Host": {
-      "value": ""
-    },
     "ibmdb2Port": {
       "value": "50000"
     },
     "ibmdb2Database": {
-      "value": ""
-    },
-    "ibmdb2Username": {
-      "value": ""
-    },
-    "ibmdb2Password": {
       "value": ""
     },
     "deployChatbot": {

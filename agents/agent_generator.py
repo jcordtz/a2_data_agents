@@ -25,16 +25,16 @@ See LICENSE file in project root for full license text.
 
 USAGE:
     # Oracle table
-    python agent_generator.py --config databases/oracle/oracle_config.ini --schema HR --table EMPLOYEES --output ./agents/HR_EMPLOYEES --db-type oracle
+    python agent_generator.py --host db.example.com --schema HR --table EMPLOYEES --output ./agents/HR_EMPLOYEES --db-type oracle
 
     # SQL Server table
-    python agent_generator.py --config databases/mssql/mssql_config.ini --schema dbo --table ORDERS --output ./agents/DBO_ORDERS --db-type mssql
+    python agent_generator.py --host sql.example.com --schema dbo --table ORDERS --output ./agents/DBO_ORDERS --db-type mssql
 
-    # PostgreSQL table
-    python agent_generator.py --config databases/postgres/postgres_config.ini --schema public --table customers --output ./agents/PUBLIC_CUSTOMERS --db-type postgres
+    # PostgreSQL table  
+    python agent_generator.py --host sales-db.example.com --schema public --table customers --output ./agents/PUBLIC_CUSTOMERS --db-type postgres
 
     # IBM DB2 table
-    python agent_generator.py --config databases/ibmdb2/ibmdb2_config.ini --schema DB2INST1 --table PRODUCTS --output ./agents/DB2INST1_PRODUCTS --db-type db2
+    python agent_generator.py --host warehouse.example.com --schema DB2INST1 --table PRODUCTS --output ./agents/DB2INST1_PRODUCTS --db-type db2
 
 GENERATED FILES:
     - function_app.py       Azure Function endpoints
@@ -75,13 +75,15 @@ DATABASE_SQL_SYNTAX = {
 }
 
 
-def get_database_connector(db_type: str, config_path: str):
+def get_database_connector(db_type: str, host: str, security_dir: str = None, connection_id: str = None):
     """
     Get the appropriate database connector for the specified database type.
     
     Args:
         db_type: Database type (oracle, mssql, postgres, db2)
-        config_path: Path to database config.ini
+        host: Database hostname to look up in security XML files
+        security_dir: Optional path to security directory containing XML files
+        connection_id: Optional specific connection ID to use
         
     Returns:
         Database connector instance
@@ -96,33 +98,35 @@ def get_database_connector(db_type: str, config_path: str):
     module = importlib.import_module(module_name)
     connector_class = getattr(module, class_name)
     
-    return connector_class(config_path)
+    return connector_class.from_host(host, security_dir=security_dir, connection_id=connection_id)
 
 
 def generate_agent(
-    config_path: str,
+    host: str,
     schema: str,
     table_name: str,
     output_dir: str,
     purview: str = "no",
-    host: str = None,
     db_type: str = None,
     service_name: str = None,
-    port: int = None
+    port: int = None,
+    security_dir: str = None,
+    connection_id: str = None
 ) -> bool:
     """
     Generate a complete Azure Function agent for a specific table.
     
     Args:
-        config_path: Path to database config.ini
+        host: Database server hostname (looked up in security XML files)
         schema: Database schema name
         table_name: Table name
         output_dir: Output directory for generated agent
         purview: Whether to enable Purview integration ("yes" or "no")
-        host: Database server hostname (required)
         db_type: Database type (oracle, mssql, postgres, db2) (required)
         service_name: Service/database name (required)
         port: Database port (required)
+        security_dir: Optional path to security directory containing XML files
+        connection_id: Optional specific connection ID to use
         
     Returns:
         True if successful, False otherwise
@@ -137,7 +141,7 @@ def generate_agent(
         
         # Connect to database and get table information
         print(f"Connecting to {effective_db_type} database to retrieve table metadata...")
-        connector = get_database_connector(effective_db_type, config_path)
+        connector = get_database_connector(effective_db_type, host, security_dir, connection_id)
         with connector:
             # Get table description
             table_description = connector.get_table_description(table_name, schema)
@@ -990,14 +994,13 @@ raise ImportError("Please copy oracle_connector.py from the main project")
 
 def main():
     parser = argparse.ArgumentParser(description="Generate a table-specific Azure Function agent")
-    parser.add_argument("--config", required=True, help="Path to database config.ini")
+    parser.add_argument("--host", required=True,
+                        help="Database server hostname (looked up in security XML files)")
     parser.add_argument("--schema", required=True, help="Database schema name")
     parser.add_argument("--table", required=True, help="Table name")
     parser.add_argument("--output", required=True, help="Output directory")
     parser.add_argument("--purview", default="no", choices=["yes", "no"],
                         help="Enable Purview integration (yes/no)")
-    parser.add_argument("--host", required=True,
-                        help="Database server hostname (required)")
     parser.add_argument("--db-type", required=True,
                         choices=["oracle", "mssql", "postgres", "db2"],
                         help="Database type (required)")
@@ -1005,19 +1008,24 @@ def main():
                         help="Service name (Oracle) or database name (others) (required)")
     parser.add_argument("--port", type=int, required=True,
                         help="Database port (required)")
+    parser.add_argument("--security-dir",
+                        help="Path to security directory containing XML files (optional)")
+    parser.add_argument("--connection-id",
+                        help="Specific connection ID to use from XML file (optional)")
     
     args = parser.parse_args()
     
     success = generate_agent(
-        config_path=args.config,
+        host=args.host,
         schema=args.schema,
         table_name=args.table,
         output_dir=args.output,
         purview=args.purview,
-        host=args.host,
         db_type=args.db_type,
         service_name=args.service_name,
-        port=args.port
+        port=args.port,
+        security_dir=args.security_dir,
+        connection_id=args.connection_id
     )
     
     sys.exit(0 if success else 1)

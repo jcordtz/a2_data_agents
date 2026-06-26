@@ -1,0 +1,236 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+================================================================================
+Microsoft SQL Server Connection Configuration
+================================================================================
+This file contains connection configurations for SQL Server databases.
+Supports multiple authentication methods:
+  - Traditional SQL Server username/password
+  - Windows Integrated Authentication
+  - Azure Key Vault credential lookup
+  - Entra ID (Azure AD) authentication (native support)
+
+Host names match sample_tables.csv:
+  - sql.example.com (HR schema, database master)
+  - analytics.example.com (ANALYTICS schema, database analyticsdb)
+  - inventory.example.com (INV schema, database inventorydb)
+
+DISCLAIMER: This code was generated with AI assistance.
+LICENSE: MIT License - Copyright (c) 2026
+================================================================================
+-->
+<connections xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
+
+    <!-- ========================================================================
+         HR DATABASE - SQL SERVER AUTHENTICATION
+         Host: sql.example.com (matches sample_tables.csv)
+         ======================================================================== -->
+    <connection id="mssql_sql_example_hr" type="mssql" auth="sql_password">
+        <description>HR Database - SQL Server Authentication</description>
+        <host>sql.example.com</host>
+        <port>1433</port>
+        <database>master</database>
+        <schema>HR</schema>
+        <credentials>
+            <username>hr_readonly</username>
+            <password>your-secure-password-here</password>
+        </credentials>
+        <options>
+            <driver>ODBC Driver 18 for SQL Server</driver>
+            <encrypt>yes</encrypt>
+            <trust_server_certificate>no</trust_server_certificate>
+            <min_connections>1</min_connections>
+            <max_connections>5</max_connections>
+            <connection_timeout>30</connection_timeout>
+        </options>
+    </connection>
+
+    <!-- ========================================================================
+         HR DATABASE - AZURE KEY VAULT AUTHENTICATION
+         Host: sql.example.com (alternative auth method)
+         ======================================================================== -->
+    <connection id="mssql_sql_example_hr_keyvault" type="mssql" auth="azure_keyvault">
+        <description>HR Database - Azure Key Vault Authentication</description>
+        <host>sql.example.com</host>
+        <port>1433</port>
+        <database>master</database>
+        <schema>HR</schema>
+        <keyvault>
+            <vault_url>https://mycompany-keyvault.vault.azure.net/</vault_url>
+            <username_secret>mssql-hr-username</username_secret>
+            <password_secret>mssql-hr-password</password_secret>
+            <auth_method>managed_identity</auth_method>
+        </keyvault>
+        <options>
+            <driver>ODBC Driver 18 for SQL Server</driver>
+            <encrypt>yes</encrypt>
+            <trust_server_certificate>no</trust_server_certificate>
+            <min_connections>2</min_connections>
+            <max_connections>10</max_connections>
+        </options>
+    </connection>
+
+    <!-- ========================================================================
+         ANALYTICS DATABASE - SQL SERVER AUTHENTICATION
+         Host: analytics.example.com (matches sample_tables.csv)
+         ======================================================================== -->
+    <connection id="mssql_analytics_example_analytics" type="mssql" auth="sql_password">
+        <description>Analytics Database - SQL Server Authentication</description>
+        <host>analytics.example.com</host>
+        <port>1433</port>
+        <database>analyticsdb</database>
+        <schema>ANALYTICS</schema>
+        <credentials>
+            <username>analytics_readonly</username>
+            <password>your-secure-password-here</password>
+        </credentials>
+        <options>
+            <driver>ODBC Driver 18 for SQL Server</driver>
+            <encrypt>yes</encrypt>
+            <trust_server_certificate>no</trust_server_certificate>
+            <min_connections>1</min_connections>
+            <max_connections>5</max_connections>
+        </options>
+    </connection>
+
+    <!-- ========================================================================
+         ANALYTICS DATABASE - ENTRA ID MANAGED IDENTITY
+         Host: analytics.example.com (alternative auth method)
+         ======================================================================== -->
+    <connection id="mssql_analytics_example_analytics_mi" type="mssql" auth="entra_id_managed_identity">
+        <description>Analytics Database - Entra ID Managed Identity Authentication</description>
+        <host>analytics.example.com</host>
+        <port>1433</port>
+        <database>analyticsdb</database>
+        <schema>ANALYTICS</schema>
+        <entra_id>
+            <auth_method>managed_identity</auth_method>
+            <!-- For user-assigned managed identity, specify client_id -->
+            <!-- <client_id>user-assigned-mi-client-id</client_id> -->
+        </entra_id>
+        <options>
+            <driver>ODBC Driver 18 for SQL Server</driver>
+            <encrypt>yes</encrypt>
+            <authentication>ActiveDirectoryMsi</authentication>
+            <min_connections>1</min_connections>
+            <max_connections>10</max_connections>
+        </options>
+    </connection>
+
+    <!-- ========================================================================
+         INVENTORY DATABASE - SQL SERVER AUTHENTICATION
+         Host: inventory.example.com (matches sample_tables.csv)
+         ======================================================================== -->
+    <connection id="mssql_inventory_example_inv" type="mssql" auth="sql_password">
+        <description>Inventory Database - SQL Server Authentication</description>
+        <host>inventory.example.com</host>
+        <port>1433</port>
+        <database>inventorydb</database>
+        <schema>INV</schema>
+        <credentials>
+            <username>inv_readonly</username>
+            <password>your-secure-password-here</password>
+        </credentials>
+        <options>
+            <driver>ODBC Driver 18 for SQL Server</driver>
+            <encrypt>yes</encrypt>
+            <trust_server_certificate>no</trust_server_certificate>
+            <min_connections>1</min_connections>
+            <max_connections>5</max_connections>
+        </options>
+    </connection>
+
+    <!-- ========================================================================
+         INVENTORY DATABASE - AZURE KEY VAULT AUTHENTICATION
+         Host: inventory.example.com (alternative auth method)
+         ======================================================================== -->
+    <connection id="mssql_inventory_example_inv_keyvault" type="mssql" auth="azure_keyvault">
+        <description>Inventory Database - Azure Key Vault Authentication</description>
+        <host>inventory.example.com</host>
+        <port>1433</port>
+        <database>inventorydb</database>
+        <schema>INV</schema>
+        <keyvault>
+            <vault_url>https://mycompany-keyvault.vault.azure.net/</vault_url>
+            <username_secret>mssql-inv-username</username_secret>
+            <password_secret>mssql-inv-password</password_secret>
+            <auth_method>managed_identity</auth_method>
+        </keyvault>
+        <options>
+            <driver>ODBC Driver 18 for SQL Server</driver>
+            <encrypt>yes</encrypt>
+            <trust_server_certificate>no</trust_server_certificate>
+            <min_connections>2</min_connections>
+            <max_connections>10</max_connections>
+        </options>
+    </connection>
+
+    <!-- ========================================================================
+         INVENTORY DATABASE - ENTRA ID SERVICE PRINCIPAL
+         Host: inventory.example.com (alternative auth method)
+         ======================================================================== -->
+    <connection id="mssql_inventory_example_inv_sp" type="mssql" auth="entra_id_service_principal">
+        <description>Inventory Database - Entra ID Service Principal Authentication</description>
+        <host>inventory.example.com</host>
+        <port>1433</port>
+        <database>inventorydb</database>
+        <schema>INV</schema>
+        <entra_id>
+            <auth_method>service_principal</auth_method>
+            <tenant_id>your-azure-tenant-id</tenant_id>
+            <client_id>your-service-principal-client-id</client_id>
+            <client_secret>your-service-principal-secret</client_secret>
+        </entra_id>
+        <options>
+            <driver>ODBC Driver 18 for SQL Server</driver>
+            <encrypt>yes</encrypt>
+            <authentication>ActiveDirectoryServicePrincipal</authentication>
+            <min_connections>2</min_connections>
+            <max_connections>20</max_connections>
+        </options>
+    </connection>
+
+    <!-- ========================================================================
+         ON-PREMISES - WINDOWS INTEGRATED AUTHENTICATION
+         ======================================================================== -->
+    <connection id="mssql_onprem_windows" type="mssql" auth="windows_integrated">
+        <description>On-Premises Database - Windows Integrated Authentication</description>
+        <host>sql-onprem.corp.example.com</host>
+        <port>1433</port>
+        <database>CorpDB</database>
+        <schema>dbo</schema>
+        <windows_auth>
+            <trusted_connection>yes</trusted_connection>
+        </windows_auth>
+        <options>
+            <driver>ODBC Driver 18 for SQL Server</driver>
+            <encrypt>yes</encrypt>
+            <trust_server_certificate>yes</trust_server_certificate>
+            <min_connections>1</min_connections>
+            <max_connections>5</max_connections>
+        </options>
+    </connection>
+
+    <!-- ========================================================================
+         DEVELOPMENT ENVIRONMENT - LOCAL SQL SERVER
+         ======================================================================== -->
+    <connection id="mssql_dev" type="mssql" auth="sql_password" environment="development">
+        <description>Development Database - Local SQL Server</description>
+        <host>localhost</host>
+        <port>1433</port>
+        <database>DevDB</database>
+        <schema>dbo</schema>
+        <credentials>
+            <username>sa</username>
+            <password>Dev_Password_123!</password>
+        </credentials>
+        <options>
+            <driver>ODBC Driver 18 for SQL Server</driver>
+            <encrypt>no</encrypt>
+            <trust_server_certificate>yes</trust_server_certificate>
+            <min_connections>1</min_connections>
+            <max_connections>2</max_connections>
+        </options>
+    </connection>
+
+</connections>

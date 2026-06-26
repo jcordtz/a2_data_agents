@@ -1,0 +1,223 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+================================================================================
+PostgreSQL Connection Configuration
+================================================================================
+This file contains connection configurations for PostgreSQL databases.
+Supports multiple authentication methods:
+  - Traditional username/password
+  - Azure Key Vault credential lookup
+  - Certificate-based authentication
+  - Entra ID (Azure AD) for Azure Database for PostgreSQL
+
+Host names match sample_tables.csv:
+  - sales-db.example.com (SALES schema, database salesdb)
+  - analytics.example.com (ANALYTICS schema, database metricsdb)
+  - inventory.example.com (INV schema, database warehousedb)
+
+DISCLAIMER: This code was generated with AI assistance.
+LICENSE: MIT License - Copyright (c) 2026
+================================================================================
+-->
+<connections xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
+
+    <!-- ========================================================================
+         SALES DATABASE - PASSWORD AUTHENTICATION
+         Host: sales-db.example.com (matches sample_tables.csv)
+         ======================================================================== -->
+    <connection id="postgres_sales_db_example_sales" type="postgres" auth="password">
+        <description>Sales Database - Password Authentication</description>
+        <host>sales-db.example.com</host>
+        <port>5432</port>
+        <database>salesdb</database>
+        <schema>SALES</schema>
+        <credentials>
+            <username>sales_readonly</username>
+            <password>your-secure-password-here</password>
+        </credentials>
+        <options>
+            <sslmode>require</sslmode>
+            <min_connections>1</min_connections>
+            <max_connections>5</max_connections>
+            <connect_timeout>30</connect_timeout>
+        </options>
+    </connection>
+
+    <!-- ========================================================================
+         SALES DATABASE - AZURE KEY VAULT AUTHENTICATION
+         Host: sales-db.example.com (alternative auth method)
+         ======================================================================== -->
+    <connection id="postgres_sales_db_example_sales_keyvault" type="postgres" auth="azure_keyvault">
+        <description>Sales Database - Azure Key Vault Authentication</description>
+        <host>sales-db.example.com</host>
+        <port>5432</port>
+        <database>salesdb</database>
+        <schema>SALES</schema>
+        <keyvault>
+            <vault_url>https://mycompany-keyvault.vault.azure.net/</vault_url>
+            <username_secret>postgres-sales-username</username_secret>
+            <password_secret>postgres-sales-password</password_secret>
+            <auth_method>managed_identity</auth_method>
+        </keyvault>
+        <options>
+            <sslmode>require</sslmode>
+            <min_connections>2</min_connections>
+            <max_connections>10</max_connections>
+        </options>
+    </connection>
+
+    <!-- ========================================================================
+         ANALYTICS DATABASE - PASSWORD AUTHENTICATION
+         Host: analytics.example.com (matches sample_tables.csv)
+         ======================================================================== -->
+    <connection id="postgres_analytics_example_analytics" type="postgres" auth="password">
+        <description>Analytics Database - Password Authentication</description>
+        <host>analytics.example.com</host>
+        <port>5432</port>
+        <database>metricsdb</database>
+        <schema>ANALYTICS</schema>
+        <credentials>
+            <username>analytics_readonly</username>
+            <password>your-secure-password-here</password>
+        </credentials>
+        <options>
+            <sslmode>require</sslmode>
+            <min_connections>1</min_connections>
+            <max_connections>5</max_connections>
+        </options>
+    </connection>
+
+    <!-- ========================================================================
+         ANALYTICS DATABASE - ENTRA ID MANAGED IDENTITY
+         Host: analytics.example.com (alternative auth method)
+         ======================================================================== -->
+    <connection id="postgres_analytics_example_analytics_mi" type="postgres" auth="entra_id_managed_identity">
+        <description>Analytics Database - Entra ID Managed Identity Authentication</description>
+        <host>analytics.example.com</host>
+        <port>5432</port>
+        <database>metricsdb</database>
+        <schema>ANALYTICS</schema>
+        <entra_id>
+            <auth_method>managed_identity</auth_method>
+            <!-- For user-assigned managed identity, specify client_id -->
+            <!-- <client_id>user-assigned-mi-client-id</client_id> -->
+            <pg_user>analytics_mi_user</pg_user>
+        </entra_id>
+        <options>
+            <sslmode>require</sslmode>
+            <min_connections>1</min_connections>
+            <max_connections>10</max_connections>
+        </options>
+    </connection>
+
+    <!-- ========================================================================
+         INVENTORY DATABASE - PASSWORD AUTHENTICATION
+         Host: inventory.example.com (matches sample_tables.csv)
+         ======================================================================== -->
+    <connection id="postgres_inventory_example_inv" type="postgres" auth="password">
+        <description>Inventory Database - Password Authentication</description>
+        <host>inventory.example.com</host>
+        <port>5432</port>
+        <database>warehousedb</database>
+        <schema>INV</schema>
+        <credentials>
+            <username>inv_readonly</username>
+            <password>your-secure-password-here</password>
+        </credentials>
+        <options>
+            <sslmode>require</sslmode>
+            <min_connections>1</min_connections>
+            <max_connections>5</max_connections>
+        </options>
+    </connection>
+
+    <!-- ========================================================================
+         INVENTORY DATABASE - AZURE KEY VAULT AUTHENTICATION
+         Host: inventory.example.com (alternative auth method)
+         ======================================================================== -->
+    <connection id="postgres_inventory_example_inv_keyvault" type="postgres" auth="azure_keyvault">
+        <description>Inventory Database - Azure Key Vault Authentication</description>
+        <host>inventory.example.com</host>
+        <port>5432</port>
+        <database>warehousedb</database>
+        <schema>INV</schema>
+        <keyvault>
+            <vault_url>https://mycompany-keyvault.vault.azure.net/</vault_url>
+            <username_secret>postgres-inv-username</username_secret>
+            <password_secret>postgres-inv-password</password_secret>
+            <auth_method>managed_identity</auth_method>
+        </keyvault>
+        <options>
+            <sslmode>require</sslmode>
+            <min_connections>2</min_connections>
+            <max_connections>10</max_connections>
+        </options>
+    </connection>
+
+    <!-- ========================================================================
+         INVENTORY DATABASE - ENTRA ID SERVICE PRINCIPAL
+         Host: inventory.example.com (alternative auth method)
+         ======================================================================== -->
+    <connection id="postgres_inventory_example_inv_sp" type="postgres" auth="entra_id_service_principal">
+        <description>Inventory Database - Entra ID Service Principal Authentication</description>
+        <host>inventory.example.com</host>
+        <port>5432</port>
+        <database>warehousedb</database>
+        <schema>INV</schema>
+        <entra_id>
+            <auth_method>service_principal</auth_method>
+            <tenant_id>your-azure-tenant-id</tenant_id>
+            <client_id>your-service-principal-client-id</client_id>
+            <client_secret>your-service-principal-secret</client_secret>
+            <pg_user>inv_sp_user</pg_user>
+        </entra_id>
+        <options>
+            <sslmode>require</sslmode>
+            <min_connections>2</min_connections>
+            <max_connections>20</max_connections>
+        </options>
+    </connection>
+
+    <!-- ========================================================================
+         CERTIFICATE-BASED AUTHENTICATION EXAMPLE
+         ======================================================================== -->
+    <connection id="postgres_secure_cert" type="postgres" auth="certificate">
+        <description>Secure Database - Certificate Authentication</description>
+        <host>secure-postgres.example.com</host>
+        <port>5432</port>
+        <database>securedb</database>
+        <schema>secure</schema>
+        <certificate>
+            <client_cert>/etc/ssl/certs/postgres-client.crt</client_cert>
+            <client_key>/etc/ssl/private/postgres-client.key</client_key>
+            <ca_cert>/etc/ssl/certs/postgres-ca.crt</ca_cert>
+            <username>secure_service</username>
+        </certificate>
+        <options>
+            <sslmode>verify-full</sslmode>
+            <min_connections>1</min_connections>
+            <max_connections>5</max_connections>
+        </options>
+    </connection>
+
+    <!-- ========================================================================
+         DEVELOPMENT ENVIRONMENT - LOCAL POSTGRESQL
+         ======================================================================== -->
+    <connection id="postgres_dev" type="postgres" auth="password" environment="development">
+        <description>Development Database - Local PostgreSQL</description>
+        <host>localhost</host>
+        <port>5432</port>
+        <database>devdb</database>
+        <schema>public</schema>
+        <credentials>
+            <username>postgres</username>
+            <password>postgres</password>
+        </credentials>
+        <options>
+            <sslmode>disable</sslmode>
+            <min_connections>1</min_connections>
+            <max_connections>2</max_connections>
+        </options>
+    </connection>
+
+</connections>

@@ -34,7 +34,7 @@ Basic usage with context manager:
 
     from oracle_connector import OracleConnector
 
-    with OracleConnector("oracle_config.ini") as oracle:
+    with OracleConnector.from_host("db.example.com") as oracle:
         # List all tables
         tables = oracle.list_tables()
         
@@ -49,24 +49,21 @@ Basic usage with context manager:
 
 Manual connection management:
 
-    oracle = OracleConnector("oracle_config.ini")
+    oracle = OracleConnector.from_host("db.example.com")
     oracle.connect(use_pool=True)  # Use connection pooling (default with SQLAlchemy)
     
     # ... perform operations ...
     
     oracle.disconnect()
 
-CONFIGURATION FILE FORMAT (oracle_config.ini)
----------------------------------------------
-    [oracle]
-    host = localhost
-    port = 1521
-    service_name = ORCL
-    username = your_username
-    password = your_password
-    schema = your_schema
-    country = DK
-    lib_dir = /path/to/oracle/instantclient  # Optional: path to Oracle Client libraries
+CONFIGURATION
+-------------
+Connection configuration is stored in XML files under the security/ directory.
+See security/oracle_connections.xml for examples of supported authentication methods:
+    - password: Traditional username/password
+    - azure_keyvault: Credentials stored in Azure Key Vault
+    - wallet: Oracle Wallet authentication
+    - entra_id: Azure AD for Oracle Autonomous DB
 
 DEPENDENCIES
 ------------
@@ -104,7 +101,6 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 """
 
-import configparser
 import pandas as pd
 from pathlib import Path
 from typing import Optional, Dict, Any, List
@@ -130,47 +126,55 @@ except ImportError:
 class OracleConnector:
     """
     A class to manage Oracle database connections and table operations using SQLAlchemy.
+    
+    Configuration is loaded from XML files in the security/ directory via hostname lookup.
+    Use the from_host() class method to create instances.
+    
+    Example:
+        connector = OracleConnector.from_host("db.example.com")
     """
 
-    def __init__(self, config_path: str = "oracle_config.ini"):
+    def __init__(self, config_dict: Dict[str, Any]):
         """
-        Initialize the Oracle connector with configuration from a file.
+        Initialize the Oracle connector with configuration dictionary.
 
         Args:
-            config_path: Path to the configuration INI file
+            config_dict: Dictionary with connection configuration.
+                        Use OracleConnector.from_host() to create instances.
         """
         if _ORACLEDB_IMPORT_ERROR is not None:
             raise ImportError(
                 "oracledb package is required. Install it with: pip install oracledb"
             ) from _ORACLEDB_IMPORT_ERROR
         
-        self.config_path = Path(config_path)
-        self.config = self._load_config()
+        self.config = config_dict
         self.engine: Optional[Engine] = None
 
-    def _load_config(self) -> Dict[str, Any]:
-        """Load configuration from the INI file."""
-        if not self.config_path.exists():
-            raise FileNotFoundError(f"Config file not found: {self.config_path}")
-
-        parser = configparser.ConfigParser()
-        parser.read(self.config_path)
-
-        if "oracle" not in parser.sections():
-            raise ValueError("Config file must contain an [oracle] section")
-
-        config: Dict[str, Any] = dict(parser["oracle"])
-
-        # Convert port to integer
-        config["port"] = int(config.get("port", 1521))
-
-        # Convert pool settings to integers if present
-        if "min_connections" in config:
-            config["min_connections"] = int(config["min_connections"])
-        if "max_connections" in config:
-            config["max_connections"] = int(config["max_connections"])
-
-        return config
+    @classmethod
+    def from_host(cls, host: str, security_dir: Optional[str] = None, connection_id: Optional[str] = None) -> "OracleConnector":
+        """
+        Create an OracleConnector by looking up connection configuration from XML files.
+        
+        Args:
+            host: Database hostname to look up (e.g., "db.example.com")
+            security_dir: Optional path to security directory containing XML files.
+                         Defaults to the project's security/ directory.
+            connection_id: Optional specific connection ID to use
+        
+        Returns:
+            Configured OracleConnector instance
+        
+        Example:
+            connector = OracleConnector.from_host("db.example.com")
+            connector = OracleConnector.from_host("db.example.com", connection_id="oracle_db_example_hr_keyvault")
+        """
+        # Import here to avoid circular imports
+        from security.connection_loader import ConnectionLoader
+        
+        loader = ConnectionLoader(security_dir)
+        config = loader.get_connection_for_ini("oracle", host, connection_id)
+        
+        return cls(config_dict=config)
 
     def _get_connection_url(self) -> str:
         """Build the SQLAlchemy connection URL for Oracle."""
@@ -774,7 +778,7 @@ if __name__ == "__main__":
     print("-" * 50)
 
     try:
-        with OracleConnector("oracle_config.ini") as oracle:
+        with OracleConnector.from_host("db.example.com") as oracle:
             # List all tables
             tables = oracle.list_tables()
             print("Tables in schema:")
@@ -797,7 +801,7 @@ if __name__ == "__main__":
     print("-" * 50)
 
     try:
-        oracle = OracleConnector("oracle_config.ini")
+        oracle = OracleConnector.from_host("db.example.com")
         oracle.connect()
 
         # Query specific table structure
@@ -830,7 +834,7 @@ if __name__ == "__main__":
     print("-" * 50)
 
     try:
-        with OracleConnector("oracle_config.ini") as oracle:
+        with OracleConnector.from_host("db.example.com") as oracle:
             # Get essay-style description of a table
             description = oracle.get_table_description("EMPLOYEES")
             print("Table Description:")

@@ -66,11 +66,7 @@ usage() {
     echo "  --location <loc>       Azure location (default: eastus)"
     echo "  --help                 Show this help message"
     echo ""
-    echo "Note: Config file is automatically selected based on database_type column in CSV:"
-    echo "  oracle  -> databases/oracle/oracle_config.ini"
-    echo "  mssql   -> databases/mssql/mssql_config.ini"
-    echo "  postgres-> databases/postgres/postgres_config.ini"
-    echo "  db2     -> databases/ibmdb2/ibmdb2_config.ini"
+    echo "Note: Database connections are looked up from security/ XML files based on hostname."
     exit 1
 }
 
@@ -206,19 +202,10 @@ tail -n +2 "$CSV_FILE" | while IFS=',' read -r DB_TYPE CSV_HOST CSV_PORT SERVICE
         continue
     fi
     
-    # Set config path based on database type
+    # Validate database type
     case "$DB_TYPE" in
-        oracle)
-            CONFIG_PATH="databases/oracle/oracle_config.ini"
-            ;;
-        mssql)
-            CONFIG_PATH="databases/mssql/mssql_config.ini"
-            ;;
-        postgres)
-            CONFIG_PATH="databases/postgres/postgres_config.ini"
-            ;;
-        db2)
-            CONFIG_PATH="databases/ibmdb2/ibmdb2_config.ini"
+        oracle|mssql|postgres|db2)
+            # Valid database type
             ;;
         *)
             print_warning "Unknown database type '$DB_TYPE' for ${SCHEMA}.${TABLE_NAME}, skipping..."
@@ -226,13 +213,6 @@ tail -n +2 "$CSV_FILE" | while IFS=',' read -r DB_TYPE CSV_HOST CSV_PORT SERVICE
             continue
             ;;
     esac
-    
-    # Validate config file exists
-    if [ ! -f "$CONFIG_PATH" ]; then
-        print_error "Config file not found: $CONFIG_PATH"
-        FAILED=$((FAILED + 1))
-        continue
-    fi
     
     CURRENT=$((CURRENT + 1))
     
@@ -244,7 +224,7 @@ tail -n +2 "$CSV_FILE" | while IFS=',' read -r DB_TYPE CSV_HOST CSV_PORT SERVICE
     
 
     
-    print_info "[$CURRENT] Generating agent for ${DB_TYPE}://${SCHEMA}.${TABLE_NAME} (Host: ${CSV_HOST}:${CSV_PORT}, Service: ${SERVICE_NAME}, Config: ${CONFIG_PATH}, Purview: ${PURVIEW})..."
+    print_info "[$CURRENT] Generating agent for ${DB_TYPE}://${SCHEMA}.${TABLE_NAME} (Host: ${CSV_HOST}:${CSV_PORT}, Service: ${SERVICE_NAME}, Purview: ${PURVIEW})..."
     
     # Build host argument
     HOST_ARG="--host $CSV_HOST"
@@ -258,14 +238,13 @@ tail -n +2 "$CSV_FILE" | while IFS=',' read -r DB_TYPE CSV_HOST CSV_PORT SERVICE
     # Build database type argument
     DB_TYPE_ARG="--db-type $DB_TYPE"
     
-    # Generate agent using Python
+    # Generate agent using Python (connection looked up from security/ XML files)
     if python3 "$(dirname "$0")/agents/agent_generator.py" \
-        --config "$CONFIG_PATH" \
+        --host "$CSV_HOST" \
         --schema "$SCHEMA" \
         --table "$TABLE_NAME" \
         --output "$AGENT_DIR" \
         --purview "$PURVIEW" \
-        $HOST_ARG \
         $PORT_ARG \
         $SERVICE_ARG \
         $DB_TYPE_ARG; then

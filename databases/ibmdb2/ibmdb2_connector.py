@@ -35,7 +35,7 @@ Basic usage with context manager:
 
     from ibmdb2_connector import IBMDB2Connector
 
-    with IBMDB2Connector("ibmdb2_config.ini") as db2:
+    with IBMDB2Connector.from_host("warehouse.example.com") as db2:
         # List all tables
         tables = db2.list_tables()
         
@@ -50,23 +50,22 @@ Basic usage with context manager:
 
 Manual connection management:
 
-    db2 = IBMDB2Connector("ibmdb2_config.ini")
+    db2 = IBMDB2Connector.from_host("warehouse.example.com")
     db2.connect(use_pool=True)  # Use connection pooling
     
     # ... perform operations ...
     
     db2.disconnect()
 
-CONFIGURATION FILE FORMAT (ibmdb2_config.ini)
---------------------------------------------
-    [ibmdb2]
-    host = localhost
-    port = 50000
-    database = sample
-    username = db2inst1
-    password = your_password
-    schema = DB2INST1
-    country = US
+CONFIGURATION
+-------------
+Connection configuration is stored in XML files under the security/ directory.
+See security/ibmdb2_connections.xml for examples of supported authentication methods:
+    - password: Traditional username/password
+    - azure_keyvault: Credentials from Key Vault
+    - kerberos: Kerberos/AD authentication
+    - certificate: Client certificate (GSKit)
+    - ibm_iam: IBM Cloud IAM
 
 DEPENDENCIES
 ------------
@@ -104,7 +103,6 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 """
 
-import configparser
 import pandas as pd
 from pathlib import Path
 from typing import Optional, Dict, Any, List
@@ -132,51 +130,55 @@ except ImportError:
 class IBMDB2Connector:
     """
     A class to manage IBM DB2 LUW database connections and table operations using SQLAlchemy.
+    
+    Configuration is loaded from XML files in the security/ directory via hostname lookup.
+    Use the from_host() class method to create instances.
+    
+    Example:
+        connector = IBMDB2Connector.from_host("warehouse.example.com")
     """
 
-    def __init__(self, config_path: str = "ibmdb2_config.ini"):
+    def __init__(self, config_dict: Dict[str, Any]):
         """
-        Initialize the IBM DB2 connector with configuration from a file.
+        Initialize the IBM DB2 connector with configuration dictionary.
 
         Args:
-            config_path: Path to the configuration INI file
+            config_dict: Dictionary with connection configuration.
+                        Use IBMDB2Connector.from_host() to create instances.
         """
-        if _IBMDB_IMPORT_ERROR is not None:
+        if _IBM_DB_SA_IMPORT_ERROR is not None:
             raise ImportError(
-                "ibm_db and ibm_db_sa packages are required. Install with: pip install ibm_db ibm_db_sa"
-            ) from _IBMDB_IMPORT_ERROR
+                "ibm_db_sa package is required. Install it with: pip install ibm-db-sa"
+            ) from _IBM_DB_SA_IMPORT_ERROR
         
-        self.config_path = Path(config_path)
-        self.config = self._load_config()
+        self.config = config_dict
         self.engine: Optional[Engine] = None
 
-    def _load_config(self) -> Dict[str, Any]:
-        """Load configuration from the INI file."""
-        if not self.config_path.exists():
-            raise FileNotFoundError(f"Config file not found: {self.config_path}")
-
-        parser = configparser.ConfigParser()
-        parser.read(self.config_path)
-
-        if "ibmdb2" not in parser.sections():
-            raise ValueError("Config file must contain an [ibmdb2] section")
-
-        config: Dict[str, Any] = dict(parser["ibmdb2"])
-
-        # Convert port to integer
-        config["port"] = int(config.get("port", 50000))
-
-        # Convert pool settings to integers if present
-        if "min_connections" in config:
-            config["min_connections"] = int(config["min_connections"])
-        if "max_connections" in config:
-            config["max_connections"] = int(config["max_connections"])
-
-        # Convert boolean settings
-        if "ssl" in config:
-            config["ssl"] = config["ssl"].lower() in ("true", "yes", "1")
-
-        return config
+    @classmethod
+    def from_host(cls, host: str, security_dir: Optional[str] = None, connection_id: Optional[str] = None) -> "IBMDB2Connector":
+        """
+        Create an IBMDB2Connector by looking up connection configuration from XML files.
+        
+        Args:
+            host: Database hostname to look up (e.g., "sales-db.example.com")
+            security_dir: Optional path to security directory containing XML files.
+                         Defaults to the project's security/ directory.
+            connection_id: Optional specific connection ID to use
+        
+        Returns:
+            Configured IBMDB2Connector instance
+        
+        Example:
+            connector = IBMDB2Connector.from_host("sales-db.example.com")
+            connector = IBMDB2Connector.from_host("warehouse.example.com", connection_id="ibmdb2_warehouse_example_dw_keyvault")
+        """
+        # Import here to avoid circular imports
+        from security.connection_loader import ConnectionLoader
+        
+        loader = ConnectionLoader(security_dir)
+        config = loader.get_connection_for_ini("ibmdb2", host, connection_id)
+        
+        return cls(config_dict=config)
 
     def _get_connection_url(self) -> str:
         """Build the SQLAlchemy connection URL for IBM DB2."""

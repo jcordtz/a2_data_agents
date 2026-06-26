@@ -1,0 +1,236 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+================================================================================
+Oracle Database Connection Configuration
+================================================================================
+This file contains connection configurations for Oracle databases.
+Supports multiple authentication methods:
+  - Traditional username/password
+  - Azure Key Vault credential lookup
+  - Oracle Wallet authentication
+  - Entra ID (Azure AD) for Oracle Autonomous Database
+
+Host names match sample_tables.csv:
+  - db.example.com (HR schema, service ORCL)
+  - sales-db.example.com (SALES schema, service SALESORCL)
+  - warehouse.example.com (DW schema, service DWORCL)
+
+DISCLAIMER: This code was generated with AI assistance.
+LICENSE: MIT License - Copyright (c) 2026
+================================================================================
+-->
+<connections xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
+
+    <!-- ========================================================================
+         HR DATABASE - TRADITIONAL USERNAME/PASSWORD AUTHENTICATION
+         Host: db.example.com (matches sample_tables.csv)
+         ======================================================================== -->
+    <connection id="oracle_db_example_hr" type="oracle" auth="password">
+        <description>HR Database - Traditional Authentication</description>
+        <host>db.example.com</host>
+        <port>1521</port>
+        <service_name>ORCL</service_name>
+        <schema>HR</schema>
+        <credentials>
+            <username>hr_readonly</username>
+            <password>your-secure-password-here</password>
+        </credentials>
+        <options>
+            <!-- Enable thick mode for advanced Oracle features -->
+            <thick_mode>true</thick_mode>
+            <lib_dir>/opt/oracle/instantclient_21_8</lib_dir>
+            <!-- Connection pooling -->
+            <min_connections>1</min_connections>
+            <max_connections>5</max_connections>
+        </options>
+    </connection>
+
+    <!-- ========================================================================
+         HR DATABASE - AZURE KEY VAULT AUTHENTICATION
+         Host: db.example.com (alternative auth method)
+         ======================================================================== -->
+    <connection id="oracle_db_example_hr_keyvault" type="oracle" auth="azure_keyvault">
+        <description>HR Database - Azure Key Vault Authentication</description>
+        <host>db.example.com</host>
+        <port>1521</port>
+        <service_name>ORCL</service_name>
+        <schema>HR</schema>
+        <keyvault>
+            <!-- Key Vault URL -->
+            <vault_url>https://mycompany-keyvault.vault.azure.net/</vault_url>
+            <!-- Secret names in Key Vault -->
+            <username_secret>oracle-hr-username</username_secret>
+            <password_secret>oracle-hr-password</password_secret>
+            <!-- Managed Identity authentication -->
+            <auth_method>managed_identity</auth_method>
+        </keyvault>
+        <options>
+            <thick_mode>true</thick_mode>
+            <min_connections>2</min_connections>
+            <max_connections>10</max_connections>
+        </options>
+    </connection>
+
+    <!-- ========================================================================
+         SALES DATABASE - PASSWORD AUTHENTICATION
+         Host: sales-db.example.com (matches sample_tables.csv)
+         ======================================================================== -->
+    <connection id="oracle_sales_db_example_sales" type="oracle" auth="password">
+        <description>Sales Database - Password Authentication</description>
+        <host>sales-db.example.com</host>
+        <port>1521</port>
+        <service_name>SALESORCL</service_name>
+        <schema>SALES</schema>
+        <credentials>
+            <username>sales_readonly</username>
+            <password>your-secure-password-here</password>
+        </credentials>
+        <options>
+            <thick_mode>true</thick_mode>
+            <min_connections>1</min_connections>
+            <max_connections>5</max_connections>
+        </options>
+    </connection>
+
+    <!-- ========================================================================
+         SALES DATABASE - AZURE KEY VAULT AUTHENTICATION
+         Host: sales-db.example.com (alternative auth method)
+         ======================================================================== -->
+    <connection id="oracle_sales_db_example_sales_keyvault" type="oracle" auth="azure_keyvault">
+        <description>Sales Database - Azure Key Vault Authentication</description>
+        <host>sales-db.example.com</host>
+        <port>1521</port>
+        <service_name>SALESORCL</service_name>
+        <schema>SALES</schema>
+        <keyvault>
+            <vault_url>https://mycompany-keyvault.vault.azure.net/</vault_url>
+            <username_secret>oracle-sales-username</username_secret>
+            <password_secret>oracle-sales-password</password_secret>
+            <auth_method>managed_identity</auth_method>
+        </keyvault>
+        <options>
+            <thick_mode>true</thick_mode>
+            <min_connections>2</min_connections>
+            <max_connections>10</max_connections>
+        </options>
+    </connection>
+
+    <!-- ========================================================================
+         DATA WAREHOUSE - PASSWORD AUTHENTICATION
+         Host: warehouse.example.com (matches sample_tables.csv)
+         ======================================================================== -->
+    <connection id="oracle_warehouse_example_dw" type="oracle" auth="password">
+        <description>Data Warehouse - Password Authentication</description>
+        <host>warehouse.example.com</host>
+        <port>1521</port>
+        <service_name>DWORCL</service_name>
+        <schema>DW</schema>
+        <credentials>
+            <username>dw_readonly</username>
+            <password>your-secure-password-here</password>
+        </credentials>
+        <options>
+            <thick_mode>true</thick_mode>
+            <min_connections>1</min_connections>
+            <max_connections>5</max_connections>
+        </options>
+    </connection>
+
+    <!-- ========================================================================
+         DATA WAREHOUSE - ORACLE WALLET AUTHENTICATION
+         Host: warehouse.example.com (alternative auth method)
+         ======================================================================== -->
+    <connection id="oracle_warehouse_example_dw_wallet" type="oracle" auth="wallet">
+        <description>Data Warehouse - Oracle Wallet Authentication</description>
+        <host>warehouse.example.com</host>
+        <port>1521</port>
+        <service_name>DWORCL</service_name>
+        <schema>DW</schema>
+        <wallet>
+            <!-- Path to Oracle Wallet directory -->
+            <wallet_location>/opt/oracle/wallet/dw</wallet_location>
+            <!-- TNS alias defined in tnsnames.ora -->
+            <tns_alias>DWORCL_SECURE</tns_alias>
+        </wallet>
+        <options>
+            <thick_mode>true</thick_mode>
+            <min_connections>1</min_connections>
+            <max_connections>5</max_connections>
+        </options>
+    </connection>
+
+    <!-- ========================================================================
+         DATA WAREHOUSE - AZURE KEY VAULT AUTHENTICATION
+         Host: warehouse.example.com (alternative auth method)
+         ======================================================================== -->
+    <connection id="oracle_warehouse_example_dw_keyvault" type="oracle" auth="azure_keyvault">
+        <description>Data Warehouse - Azure Key Vault Authentication</description>
+        <host>warehouse.example.com</host>
+        <port>1521</port>
+        <service_name>DWORCL</service_name>
+        <schema>DW</schema>
+        <keyvault>
+            <vault_url>https://mycompany-keyvault.vault.azure.net/</vault_url>
+            <username_secret>oracle-dw-username</username_secret>
+            <password_secret>oracle-dw-password</password_secret>
+            <auth_method>managed_identity</auth_method>
+        </keyvault>
+        <options>
+            <thick_mode>true</thick_mode>
+            <min_connections>2</min_connections>
+            <max_connections>10</max_connections>
+        </options>
+    </connection>
+
+    <!-- ========================================================================
+         ORACLE AUTONOMOUS DATABASE - ENTRA ID AUTHENTICATION
+         For Oracle ADB with Azure AD integration
+         ======================================================================== -->
+    <connection id="oracle_analytics_adb" type="oracle" auth="entra_id">
+        <description>Analytics Autonomous Database - Entra ID (Azure AD) Authentication</description>
+        <!-- Oracle Autonomous Database connection -->
+        <host>adb.us-ashburn-1.oraclecloud.com</host>
+        <port>1522</port>
+        <service_name>analytics_high</service_name>
+        <schema>ANALYTICS</schema>
+        <entra_id>
+            <!-- Entra ID tenant -->
+            <tenant_id>your-azure-tenant-id</tenant_id>
+            <!-- Authentication method -->
+            <auth_method>service_principal</auth_method>
+            <client_id>your-sp-client-id</client_id>
+            <client_secret>your-sp-client-secret</client_secret>
+            <!-- Oracle user mapped to Azure AD identity -->
+            <oracle_user>AZURE_USER</oracle_user>
+        </entra_id>
+        <wallet>
+            <!-- Wallet required for ADB connections -->
+            <wallet_location>/opt/oracle/wallet/analytics_adb</wallet_location>
+        </wallet>
+        <options>
+            <thick_mode>true</thick_mode>
+            <ssl_mode>required</ssl_mode>
+        </options>
+    </connection>
+
+    <!-- ========================================================================
+         DEVELOPMENT ENVIRONMENT - LOCAL ORACLE
+         ======================================================================== -->
+    <connection id="oracle_dev" type="oracle" auth="password" environment="development">
+        <description>Development Database - Local Testing</description>
+        <host>localhost</host>
+        <port>1521</port>
+        <service_name>XEPDB1</service_name>
+        <schema>DEV_USER</schema>
+        <credentials>
+            <username>dev_user</username>
+            <password>dev_password</password>
+        </credentials>
+        <options>
+            <thick_mode>false</thick_mode>
+            <min_connections>1</min_connections>
+            <max_connections>2</max_connections>
+        </options>
+    </connection>
+
+</connections>

@@ -44,24 +44,24 @@ Basic usage with context manager:
 
     from data_agent import DataAgent
 
-    # For Oracle database
-    with DataAgent("oracle_config.ini", db_type="oracle") as agent:
+    # For Oracle database (host is looked up from security/oracle_connections.xml)
+    with DataAgent("db.example.com", db_type="oracle") as agent:
         response = agent.ask("What tables are available?")
         print(response.answer)
     
     # For SQL Server
-    with DataAgent("mssql_config.ini", db_type="mssql") as agent:
+    with DataAgent("sql.example.com", db_type="mssql") as agent:
         response = agent.ask("Show me the top 10 employees by salary")
         print(response.answer)
     
     # For PostgreSQL
-    with DataAgent("postgres_config.ini", db_type="postgres") as agent:
+    with DataAgent("sales-db.example.com", db_type="postgres") as agent:
         response = agent.ask("How many records are in the orders table?")
         print(response.answer)
 
 Manual connection management:
 
-    agent = DataAgent("agent_config.ini", db_type="oracle")
+    agent = DataAgent("db.example.com", db_type="oracle")
     
     response = agent.ask("How many records are in the ORDERS table?")
     print(response.answer)
@@ -71,32 +71,24 @@ Manual connection management:
     
     agent.close()
 
-CONFIGURATION FILE FORMAT (agent_config.ini)
---------------------------------------------
+CONFIGURATION
+-------------
+Database connections are configured via XML files in the security/ directory.
+See security/README.md for details on supported authentication methods.
+
+Azure OpenAI settings can be provided via:
+1. Environment variables:
+    - AZURE_OPENAI_ENDPOINT
+    - AZURE_OPENAI_API_KEY  
+    - AZURE_OPENAI_API_VERSION
+    - AZURE_OPENAI_DEPLOYMENT
+
+2. Configuration file (agent_config.ini):
     [azure_openai]
     endpoint = https://your-resource.openai.azure.com/
     api_key = your-api-key
     api_version = 2024-02-15-preview
     deployment_name = gpt-4o
-
-    # For Oracle:
-    [oracle]
-    host = your-oracle-host
-    port = 1521
-    service_name = ORCL
-    username = your_username
-    password = your_password
-    schema = your_schema
-    country = DK  # Language for responses
-
-    # For SQL Server:
-    [mssql]
-    host = your-sql-server
-    port = 1433
-    database = your_database
-    username = your_username
-    password = your_password
-    country = US
 
     # For PostgreSQL:
     [postgres]
@@ -199,13 +191,15 @@ DATABASE_SQL_SYNTAX = {
 }
 
 
-def get_database_connector(db_type: str, config_path: str):
+def get_database_connector(db_type: str, host: str, security_dir: str = None, connection_id: str = None):
     """
     Get the appropriate database connector for the specified database type.
     
     Args:
         db_type: Database type (oracle, mssql, postgres, db2)
-        config_path: Path to database config.ini
+        host: Database hostname to look up in security XML files
+        security_dir: Optional path to security directory containing XML files
+        connection_id: Optional specific connection ID to use
         
     Returns:
         Database connector instance
@@ -219,7 +213,7 @@ def get_database_connector(db_type: str, config_path: str):
     module = importlib.import_module(module_name)
     connector_class = getattr(module, class_name)
     
-    return connector_class(config_path)
+    return connector_class.from_host(host, security_dir=security_dir, connection_id=connection_id)
 
 
 # Country code to language mapping for natural language descriptions
@@ -289,23 +283,37 @@ class DataAgent:
     Uses Azure OpenAI for understanding queries and generating SQL.
     
     Supported databases: Oracle, SQL Server, PostgreSQL, IBM DB2
+    
+    Database connections are configured via XML files in the security/ directory.
+    Azure OpenAI settings can be provided via config file or environment variables.
     """
 
-    def __init__(self, config_path: str = "agent_config.ini", db_type: str = "oracle"):
+    def __init__(
+        self, 
+        host: str, 
+        db_type: str = "oracle",
+        config_path: str = "agent_config.ini",
+        security_dir: str = None,
+        connection_id: str = None
+    ):
         """
         Initialize the data agent.
 
         Args:
-            config_path: Path to the configuration file
+            host: Database hostname to look up in security XML files
             db_type: Database type (oracle, mssql, postgres, db2)
+            config_path: Path to agent config file (for Azure OpenAI settings)
+            security_dir: Optional path to security directory containing XML files
+            connection_id: Optional specific connection ID to use
         """
         self.db_type = db_type.lower()
+        self.host = host
         self.sql_syntax = DATABASE_SQL_SYNTAX.get(self.db_type, "SQL")
         self.config = self._load_config(config_path)
         self.client = self._init_openai_client()
         
         # Initialize the appropriate database connector
-        self.db = get_database_connector(self.db_type, config_path)
+        self.db = get_database_connector(self.db_type, host, security_dir, connection_id)
         self.db.connect()
         
         # Define available tools/functions
@@ -317,26 +325,34 @@ class DataAgent:
         self._init_system_prompt()
 
     def _load_config(self, config_path: str) -> Dict[str, Any]:
-        """Load configuration from INI file."""
-        path = Path(config_path)
-        if not path.exists():
-            raise FileNotFoundError(f"Config file not found: {path}")
-
-        parser = configparser.ConfigParser()
-        parser.read(path)
+        """Load Azure OpenAI configuration from INI file or environment variables."""
+        import os
         
-        # Get database section name based on db_type
-        db_section = self.db_type if self.db_type != "db2" else "ibmdb2"
-
         config = {
-            "azure_openai": dict(parser["azure_openai"]),
-            "database": dict(parser[db_section]) if db_section in parser.sections() else {},
-            "agent": dict(parser["agent"]) if "agent" in parser.sections() else {},
+            "azure_openai": {},
+            "agent": {},
         }
         
-        # For backward compatibility, also store as "oracle" key if that's the db type
-        if self.db_type == "oracle" and "oracle" in parser.sections():
-            config["oracle"] = dict(parser["oracle"])
+        # Try loading from config file
+        path = Path(config_path)
+        if path.exists():
+            parser = configparser.ConfigParser()
+            parser.read(path)
+            
+            if "azure_openai" in parser.sections():
+                config["azure_openai"] = dict(parser["azure_openai"])
+            if "agent" in parser.sections():
+                config["agent"] = dict(parser["agent"])
+        
+        # Override with environment variables if set
+        if os.environ.get("AZURE_OPENAI_ENDPOINT"):
+            config["azure_openai"]["endpoint"] = os.environ["AZURE_OPENAI_ENDPOINT"]
+        if os.environ.get("AZURE_OPENAI_API_KEY"):
+            config["azure_openai"]["api_key"] = os.environ["AZURE_OPENAI_API_KEY"]
+        if os.environ.get("AZURE_OPENAI_API_VERSION"):
+            config["azure_openai"]["api_version"] = os.environ["AZURE_OPENAI_API_VERSION"]
+        if os.environ.get("AZURE_OPENAI_DEPLOYMENT"):
+            config["azure_openai"]["deployment"] = os.environ["AZURE_OPENAI_DEPLOYMENT"]
         
         return config
 
@@ -1086,7 +1102,8 @@ if __name__ == "__main__":
     print("=" * 60)
 
     try:
-        with DataAgent("agent_config.ini") as agent:
+        # Connect using hostname lookup from security XML files
+        with DataAgent("db.example.com", db_type="oracle") as agent:
             # Example questions
             questions = [
                 "What tables are available in the database?",

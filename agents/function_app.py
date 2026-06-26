@@ -175,8 +175,22 @@ def get_agent() -> DataAgent:
     """Get or create the DataAgent instance."""
     global _agent
     if _agent is None:
+        host = os.environ.get("DATABASE_HOST")
+        db_type = os.environ.get("DATABASE_TYPE", "oracle")
         config_path = os.environ.get("AGENT_CONFIG_PATH", "agent_config.ini")
-        _agent = DataAgent(config_path)
+        security_dir = os.environ.get("SECURITY_DIR")
+        connection_id = os.environ.get("CONNECTION_ID")
+        
+        if not host:
+            raise ValueError("DATABASE_HOST environment variable is required")
+        
+        _agent = DataAgent(
+            host=host,
+            db_type=db_type,
+            config_path=config_path,
+            security_dir=security_dir,
+            connection_id=connection_id
+        )
     return _agent
 
 

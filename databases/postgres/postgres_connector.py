@@ -34,7 +34,7 @@ Basic usage with context manager:
 
     from postgres_connector import PostgresConnector
 
-    with PostgresConnector("postgres_config.ini") as pg:
+    with PostgresConnector.from_host("sales-db.example.com") as pg:
         # List all tables
         tables = pg.list_tables()
         
@@ -49,24 +49,22 @@ Basic usage with context manager:
 
 Manual connection management:
 
-    pg = PostgresConnector("postgres_config.ini")
+    pg = PostgresConnector.from_host("sales-db.example.com")
     pg.connect(use_pool=True)  # Use connection pooling (default with SQLAlchemy)
     
     # ... perform operations ...
     
     pg.disconnect()
 
-CONFIGURATION FILE FORMAT (postgres_config.ini)
------------------------------------------------
-    [postgres]
-    host = localhost
-    port = 5432
-    database = your_database
-    username = your_username
-    password = your_password
-    schema = public
-    country = US
-    sslmode = prefer
+CONFIGURATION
+-------------
+Connection configuration is stored in XML files under the security/ directory.
+See security/postgres_connections.xml for examples of supported authentication methods:
+    - password: Traditional username/password
+    - azure_keyvault: Credentials from Key Vault
+    - certificate: Client certificate authentication
+    - entra_id_managed_identity: Azure AD Managed Identity
+    - entra_id_service_principal: Azure AD service principal
 
 DEPENDENCIES
 ------------
@@ -103,7 +101,6 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 """
 
-import configparser
 import pandas as pd
 from pathlib import Path
 from typing import Optional, Dict, Any, List
@@ -130,47 +127,55 @@ except ImportError:
 class PostgresConnector:
     """
     A class to manage PostgreSQL database connections and table operations using SQLAlchemy.
+    
+    Configuration is loaded from XML files in the security/ directory via hostname lookup.
+    Use the from_host() class method to create instances.
+    
+    Example:
+        connector = PostgresConnector.from_host("sales-db.example.com")
     """
 
-    def __init__(self, config_path: str = "postgres_config.ini"):
+    def __init__(self, config_dict: Dict[str, Any]):
         """
-        Initialize the PostgreSQL connector with configuration from a file.
+        Initialize the PostgreSQL connector with configuration dictionary.
 
         Args:
-            config_path: Path to the configuration INI file
+            config_dict: Dictionary with connection configuration.
+                        Use PostgresConnector.from_host() to create instances.
         """
         if _PSYCOPG2_IMPORT_ERROR is not None:
             raise ImportError(
                 "psycopg2 package is required. Install it with: pip install psycopg2-binary"
             ) from _PSYCOPG2_IMPORT_ERROR
         
-        self.config_path = Path(config_path)
-        self.config = self._load_config()
+        self.config = config_dict
         self.engine: Optional[Engine] = None
 
-    def _load_config(self) -> Dict[str, Any]:
-        """Load configuration from the INI file."""
-        if not self.config_path.exists():
-            raise FileNotFoundError(f"Config file not found: {self.config_path}")
-
-        parser = configparser.ConfigParser()
-        parser.read(self.config_path)
-
-        if "postgres" not in parser.sections():
-            raise ValueError("Config file must contain a [postgres] section")
-
-        config: Dict[str, Any] = dict(parser["postgres"])
-
-        # Convert port to integer
-        config["port"] = int(config.get("port", 5432))
-
-        # Convert pool settings to integers if present
-        if "min_connections" in config:
-            config["min_connections"] = int(config["min_connections"])
-        if "max_connections" in config:
-            config["max_connections"] = int(config["max_connections"])
-
-        return config
+    @classmethod
+    def from_host(cls, host: str, security_dir: Optional[str] = None, connection_id: Optional[str] = None) -> "PostgresConnector":
+        """
+        Create a PostgresConnector by looking up connection configuration from XML files.
+        
+        Args:
+            host: Database hostname to look up (e.g., "sales-db.example.com")
+            security_dir: Optional path to security directory containing XML files.
+                         Defaults to the project's security/ directory.
+            connection_id: Optional specific connection ID to use
+        
+        Returns:
+            Configured PostgresConnector instance
+        
+        Example:
+            connector = PostgresConnector.from_host("sales-db.example.com")
+            connector = PostgresConnector.from_host("analytics.example.com", connection_id="postgres_analytics_example_analytics_mi")
+        """
+        # Import here to avoid circular imports
+        from security.connection_loader import ConnectionLoader
+        
+        loader = ConnectionLoader(security_dir)
+        config = loader.get_connection_for_ini("postgres", host, connection_id)
+        
+        return cls(config_dict=config)
 
     def _get_connection_url(self) -> str:
         """Build the SQLAlchemy connection URL for PostgreSQL."""
@@ -796,7 +801,7 @@ if __name__ == "__main__":
     print("-" * 50)
 
     try:
-        with PostgresConnector("postgres_config.ini") as pg:
+        with PostgresConnector.from_host("sales-db.example.com") as pg:
             # List all tables
             tables = pg.list_tables()
             print("Tables in schema:")
@@ -819,7 +824,7 @@ if __name__ == "__main__":
     print("-" * 50)
 
     try:
-        pg = PostgresConnector("postgres_config.ini")
+        pg = PostgresConnector.from_host("sales-db.example.com")
         pg.connect()
 
         # Query specific table structure

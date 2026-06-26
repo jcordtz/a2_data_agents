@@ -34,7 +34,7 @@ Basic usage with context manager:
 
     from mssql_connector import MSSQLConnector
 
-    with MSSQLConnector("mssql_config.ini") as mssql:
+    with MSSQLConnector.from_host("sql.example.com") as mssql:
         # List all tables
         tables = mssql.list_tables()
         
@@ -49,24 +49,22 @@ Basic usage with context manager:
 
 Manual connection management:
 
-    mssql = MSSQLConnector("mssql_config.ini")
+    mssql = MSSQLConnector.from_host("sql.example.com")
     mssql.connect(use_pool=True)  # Use connection pooling (default with SQLAlchemy)
     
     # ... perform operations ...
     
     mssql.disconnect()
 
-CONFIGURATION FILE FORMAT (mssql_config.ini)
---------------------------------------------
-    [mssql]
-    host = localhost
-    port = 1433
-    database = your_database
-    username = your_username
-    password = your_password
-    schema = dbo
-    country = US
-    driver = ODBC Driver 18 for SQL Server
+CONFIGURATION
+-------------
+Connection configuration is stored in XML files under the security/ directory.
+See security/mssql_connections.xml for examples of supported authentication methods:
+    - sql_password: SQL Server authentication
+    - windows_integrated: Windows/AD integrated auth
+    - azure_keyvault: Credentials from Key Vault
+    - entra_id_managed_identity: Azure Managed Identity
+    - entra_id_service_principal: Azure AD service principal
 
 DEPENDENCIES
 ------------
@@ -104,7 +102,6 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 """
 
-import configparser
 import pandas as pd
 from pathlib import Path
 from typing import Optional, Dict, Any, List
@@ -131,55 +128,55 @@ except ImportError:
 class MSSQLConnector:
     """
     A class to manage Microsoft SQL Server database connections and table operations using SQLAlchemy.
+    
+    Configuration is loaded from XML files in the security/ directory via hostname lookup.
+    Use the from_host() class method to create instances.
+    
+    Example:
+        connector = MSSQLConnector.from_host("sql.example.com")
     """
 
-    def __init__(self, config_path: str = "mssql_config.ini"):
+    def __init__(self, config_dict: Dict[str, Any]):
         """
-        Initialize the MSSQL connector with configuration from a file.
+        Initialize the MSSQL connector with configuration dictionary.
 
         Args:
-            config_path: Path to the configuration INI file
+            config_dict: Dictionary with connection configuration.
+                        Use MSSQLConnector.from_host() to create instances.
         """
         if _PYODBC_IMPORT_ERROR is not None:
             raise ImportError(
                 "pyodbc package is required. Install it with: pip install pyodbc"
             ) from _PYODBC_IMPORT_ERROR
         
-        self.config_path = Path(config_path)
-        self.config = self._load_config()
+        self.config = config_dict
         self.engine: Optional[Engine] = None
 
-    def _load_config(self) -> Dict[str, Any]:
-        """Load configuration from the INI file."""
-        if not self.config_path.exists():
-            raise FileNotFoundError(f"Config file not found: {self.config_path}")
-
-        parser = configparser.ConfigParser()
-        parser.read(self.config_path)
-
-        if "mssql" not in parser.sections():
-            raise ValueError("Config file must contain an [mssql] section")
-
-        config: Dict[str, Any] = dict(parser["mssql"])
-
-        # Convert port to integer
-        config["port"] = int(config.get("port", 1433))
-
-        # Convert pool settings to integers if present
-        if "min_connections" in config:
-            config["min_connections"] = int(config["min_connections"])
-        if "max_connections" in config:
-            config["max_connections"] = int(config["max_connections"])
-
-        # Convert boolean settings
-        if "trusted_connection" in config:
-            config["trusted_connection"] = config["trusted_connection"].lower() in ("true", "yes", "1")
-        if "encrypt" in config:
-            config["encrypt"] = config["encrypt"].lower() in ("true", "yes", "1")
-        if "trust_server_certificate" in config:
-            config["trust_server_certificate"] = config["trust_server_certificate"].lower() in ("true", "yes", "1")
-
-        return config
+    @classmethod
+    def from_host(cls, host: str, security_dir: Optional[str] = None, connection_id: Optional[str] = None) -> "MSSQLConnector":
+        """
+        Create a MSSQLConnector by looking up connection configuration from XML files.
+        
+        Args:
+            host: Database hostname to look up (e.g., "sql.example.com")
+            security_dir: Optional path to security directory containing XML files.
+                         Defaults to the project's security/ directory.
+            connection_id: Optional specific connection ID to use
+        
+        Returns:
+            Configured MSSQLConnector instance
+        
+        Example:
+            connector = MSSQLConnector.from_host("sql.example.com")
+            connector = MSSQLConnector.from_host("sql.example.com", connection_id="mssql_sql_example_hr_keyvault")
+        """
+        # Import here to avoid circular imports
+        from security.connection_loader import ConnectionLoader
+        
+        loader = ConnectionLoader(security_dir)
+        config = loader.get_connection_for_ini("mssql", host, connection_id)
+        
+        return cls(config_dict=config)
 
     def _get_connection_url(self) -> str:
         """Build the SQLAlchemy connection URL for MSSQL."""
@@ -809,7 +806,7 @@ if __name__ == "__main__":
     print("-" * 50)
 
     try:
-        with MSSQLConnector("mssql_config.ini") as mssql:
+        with MSSQLConnector.from_host("sql.example.com") as mssql:
             # List all tables
             tables = mssql.list_tables()
             print("Tables in schema:")
@@ -832,7 +829,7 @@ if __name__ == "__main__":
     print("-" * 50)
 
     try:
-        mssql = MSSQLConnector("mssql_config.ini")
+        mssql = MSSQLConnector.from_host("sql.example.com")
         mssql.connect()
 
         # Query specific table structure

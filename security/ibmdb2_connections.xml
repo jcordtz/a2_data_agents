@@ -1,0 +1,205 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+================================================================================
+IBM DB2 LUW Connection Configuration
+================================================================================
+This file contains connection configurations for IBM DB2 databases.
+Supports multiple authentication methods:
+  - Traditional username/password
+  - Azure Key Vault credential lookup
+  - Kerberos authentication
+  - Certificate-based authentication
+
+Note: IBM DB2 does not natively support Entra ID (Azure AD) authentication.
+Use Azure Key Vault to securely store and retrieve credentials.
+
+Host names match sample_tables.csv:
+  - sales-db.example.com (SALES schema, database SALESDB)
+  - warehouse.example.com (DW schema, database DWDB)
+
+DISCLAIMER: This code was generated with AI assistance.
+LICENSE: MIT License - Copyright (c) 2026
+================================================================================
+-->
+<connections xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
+
+    <!-- ========================================================================
+         SALES DATABASE - PASSWORD AUTHENTICATION
+         Host: sales-db.example.com (matches sample_tables.csv)
+         ======================================================================== -->
+    <connection id="db2_sales_db_example_sales" type="db2" auth="password">
+        <description>Sales Database - Password Authentication</description>
+        <host>sales-db.example.com</host>
+        <port>50000</port>
+        <database>SALESDB</database>
+        <schema>SALES</schema>
+        <credentials>
+            <username>sales_readonly</username>
+            <password>your-secure-password-here</password>
+        </credentials>
+        <options>
+            <security>SSL</security>
+            <ssl_client_keystoredb>/opt/ibm/ssl/client.kdb</ssl_client_keystoredb>
+            <ssl_client_keystash>/opt/ibm/ssl/client.sth</ssl_client_keystash>
+            <min_connections>1</min_connections>
+            <max_connections>5</max_connections>
+            <connect_timeout>30</connect_timeout>
+        </options>
+    </connection>
+
+    <!-- ========================================================================
+         SALES DATABASE - AZURE KEY VAULT AUTHENTICATION
+         Host: sales-db.example.com (alternative auth method)
+         ======================================================================== -->
+    <connection id="db2_sales_db_example_sales_keyvault" type="db2" auth="azure_keyvault">
+        <description>Sales Database - Azure Key Vault Authentication</description>
+        <host>sales-db.example.com</host>
+        <port>50000</port>
+        <database>SALESDB</database>
+        <schema>SALES</schema>
+        <keyvault>
+            <vault_url>https://mycompany-keyvault.vault.azure.net/</vault_url>
+            <username_secret>db2-sales-username</username_secret>
+            <password_secret>db2-sales-password</password_secret>
+            <auth_method>managed_identity</auth_method>
+        </keyvault>
+        <options>
+            <security>SSL</security>
+            <min_connections>2</min_connections>
+            <max_connections>10</max_connections>
+        </options>
+    </connection>
+
+    <!-- ========================================================================
+         DATA WAREHOUSE - PASSWORD AUTHENTICATION
+         Host: warehouse.example.com (matches sample_tables.csv)
+         ======================================================================== -->
+    <connection id="db2_warehouse_example_dw" type="db2" auth="password">
+        <description>Data Warehouse - Password Authentication</description>
+        <host>warehouse.example.com</host>
+        <port>50000</port>
+        <database>DWDB</database>
+        <schema>DW</schema>
+        <credentials>
+            <username>dw_readonly</username>
+            <password>your-secure-password-here</password>
+        </credentials>
+        <options>
+            <security>SSL</security>
+            <min_connections>1</min_connections>
+            <max_connections>5</max_connections>
+        </options>
+    </connection>
+
+    <!-- ========================================================================
+         DATA WAREHOUSE - AZURE KEY VAULT AUTHENTICATION
+         Host: warehouse.example.com (alternative auth method)
+         ======================================================================== -->
+    <connection id="db2_warehouse_example_dw_keyvault" type="db2" auth="azure_keyvault">
+        <description>Data Warehouse - Azure Key Vault Authentication</description>
+        <host>warehouse.example.com</host>
+        <port>50000</port>
+        <database>DWDB</database>
+        <schema>DW</schema>
+        <keyvault>
+            <vault_url>https://mycompany-keyvault.vault.azure.net/</vault_url>
+            <username_secret>db2-dw-username</username_secret>
+            <password_secret>db2-dw-password</password_secret>
+            <auth_method>managed_identity</auth_method>
+        </keyvault>
+        <options>
+            <security>SSL</security>
+            <min_connections>2</min_connections>
+            <max_connections>10</max_connections>
+        </options>
+    </connection>
+
+    <!-- ========================================================================
+         DATA WAREHOUSE - KERBEROS AUTHENTICATION
+         Host: warehouse.example.com (alternative auth method)
+         ======================================================================== -->
+    <connection id="db2_warehouse_example_dw_kerberos" type="db2" auth="kerberos">
+        <description>Data Warehouse - Kerberos Authentication</description>
+        <host>warehouse.example.com</host>
+        <port>50000</port>
+        <database>DWDB</database>
+        <schema>DW</schema>
+        <kerberos>
+            <realm>CORP.EXAMPLE.COM</realm>
+            <service_principal>db2/warehouse.example.com@CORP.EXAMPLE.COM</service_principal>
+            <keytab>/etc/krb5/db2_service.keytab</keytab>
+            <principal>db2_dw_svc@CORP.EXAMPLE.COM</principal>
+        </kerberos>
+        <options>
+            <security>KERBEROS</security>
+            <authentication>KERBEROS</authentication>
+            <min_connections>1</min_connections>
+            <max_connections>5</max_connections>
+        </options>
+    </connection>
+
+    <!-- ========================================================================
+         CERTIFICATE-BASED AUTHENTICATION EXAMPLE
+         ======================================================================== -->
+    <connection id="db2_secure_cert" type="db2" auth="certificate">
+        <description>Secure Database - Certificate Authentication</description>
+        <host>secure-db2.example.com</host>
+        <port>50001</port>
+        <database>SECUREDB</database>
+        <schema>SECURE</schema>
+        <certificate>
+            <client_keystoredb>/opt/ibm/ssl/client.kdb</client_keystoredb>
+            <client_keystash>/opt/ibm/ssl/client.sth</client_keystash>
+            <client_cert_label>db2_client_cert</client_cert_label>
+            <server_ca_label>db2_server_ca</server_ca_label>
+        </certificate>
+        <options>
+            <security>SSL</security>
+            <ssl_client_label>db2_client_cert</ssl_client_label>
+            <min_connections>1</min_connections>
+            <max_connections>5</max_connections>
+        </options>
+    </connection>
+
+    <!-- ========================================================================
+         DB2 ON CLOUD (IBM CLOUD) - IAM AUTHENTICATION
+         ======================================================================== -->
+    <connection id="db2_cloud_iam" type="db2" auth="ibm_iam">
+        <description>DB2 on IBM Cloud - IAM Authentication</description>
+        <host>your-db2-hostname.databases.appdomain.cloud</host>
+        <port>30000</port>
+        <database>BLUDB</database>
+        <schema>CLOUD_USER</schema>
+        <ibm_iam>
+            <api_key>your-ibm-cloud-api-key</api_key>
+        </ibm_iam>
+        <options>
+            <security>SSL</security>
+            <ssl_client_keystoredb>/opt/ibm/ssl/cloud_client.kdb</ssl_client_keystoredb>
+            <ssl_client_keystash>/opt/ibm/ssl/cloud_client.sth</ssl_client_keystash>
+            <min_connections>1</min_connections>
+            <max_connections>10</max_connections>
+        </options>
+    </connection>
+
+    <!-- ========================================================================
+         DEVELOPMENT ENVIRONMENT - LOCAL DB2
+         ======================================================================== -->
+    <connection id="db2_dev" type="db2" auth="password" environment="development">
+        <description>Development Database - Local DB2</description>
+        <host>localhost</host>
+        <port>50000</port>
+        <database>DEVDB</database>
+        <schema>DEV_USER</schema>
+        <credentials>
+            <username>db2inst1</username>
+            <password>db2inst1</password>
+        </credentials>
+        <options>
+            <security>CLEAR</security>
+            <min_connections>1</min_connections>
+            <max_connections>2</max_connections>
+        </options>
+    </connection>
+
+</connections>

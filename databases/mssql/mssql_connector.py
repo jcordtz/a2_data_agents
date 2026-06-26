@@ -224,11 +224,14 @@ class MSSQLConnector:
         connection_url = self._get_connection_url()
 
         if use_pool:
+            # Convert pool settings to int (may be strings from XML config)
+            min_conn = int(self.config.get("min_connections", 1))
+            max_conn = int(self.config.get("max_connections", 5))
             self.engine = create_engine(
                 connection_url,
                 poolclass=QueuePool,
-                pool_size=self.config.get("min_connections", 1),
-                max_overflow=self.config.get("max_connections", 5) - self.config.get("min_connections", 1),
+                pool_size=min_conn,
+                max_overflow=max_conn - min_conn,
                 pool_pre_ping=True,
             )
         else:

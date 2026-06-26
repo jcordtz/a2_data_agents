@@ -1,0 +1,4 @@
+database_type,host,port,service_name,schema,table_name,purview
+oracle,jcooracledb.francecentral.cloudapp.azure.com,1521,XE,HR,EMPLOYEES,no
+oracle,jcooracledb.francecentral.cloudapp.azure.com,1521,XE,HR,DEPARTMENTS,no
+

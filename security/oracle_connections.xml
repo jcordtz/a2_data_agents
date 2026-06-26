@@ -45,6 +45,30 @@ LICENSE: MIT License - Copyright (c) 2026
         </options>
     </connection>
 
+        <!-- ========================================================================
+         HR DATABASE - TRADITIONAL USERNAME/PASSWORD AUTHENTICATION
+         Host: db.example.com (matches sample_tables.csv)
+         ======================================================================== -->
+    <connection id="jcooracledb.francecentral.cloudapp.azure.com_hr" type="oracle" auth="password">
+        <description>HR Database - Traditional Authentication</description>
+        <host>jcooracledb.francecentral.cloudapp.azure.com</host>
+        <port>1521</port>
+        <service_name>XE</service_name>
+        <schema>HR</schema>
+        <credentials>
+            <username>hr</username>
+            <password>hr</password>
+        </credentials>
+        <options>
+            <!-- Enable thick mode for advanced Oracle features -->
+            <thick_mode>true</thick_mode>
+            <lib_dir>/Users/jancordtz/Oracle/instantclient_23_26</lib_dir>
+            <!-- Connection pooling -->
+            <min_connections>1</min_connections>
+            <max_connections>5</max_connections>
+        </options>
+    </connection>
+
     <!-- ========================================================================
          HR DATABASE - AZURE KEY VAULT AUTHENTICATION
          Host: db.example.com (alternative auth method)

@@ -1,8 +1,11 @@
 # Ignore config files with secrets
 agent_config.ini
-oracle_config.ini
 local.settings.json
 infra/main.parameters.json
+
+# Security XML files with credentials
+security/*_connections.xml
+!security/*_connections.xml.example
 
 # Python
 __pycache__/

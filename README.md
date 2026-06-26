@@ -700,21 +700,21 @@ az deployment group create \
 
 1. **Thick mode not initialized**: Ensure Oracle Instant Client is installed and `init_oracle_client()` can find it
 2. **Connection timeout**: Check firewall rules and Oracle listener status
-3. **Authentication failed**: Verify credentials in `oracle_config.ini`
+3. **Authentication failed**: Verify credentials in `security/oracle_connections.xml`
 
 ### SQL Server Connection Issues
 
 1. **ODBC Driver not found**: Install Microsoft ODBC Driver for SQL Server (`brew install microsoft/mssql-release/msodbcsql18` on macOS)
 2. **Connection timeout**: Check firewall rules and SQL Server Browser service
-3. **Certificate errors**: Set `trust_server_certificate = True` for self-signed certificates
-4. **Authentication failed**: Verify credentials or use `trusted_connection = True` for Windows auth
+3. **Certificate errors**: Set `trust_server_certificate` to `true` in the connection options
+4. **Authentication failed**: Verify credentials in `security/mssql_connections.xml`
 
 ### PostgreSQL Connection Issues
 
 1. **psycopg2 not installed**: Install with `pip install psycopg2-binary`
 2. **Connection refused**: Check PostgreSQL is running and accepting connections
-3. **SSL errors**: Adjust `sslmode` setting (disable, allow, prefer, require)
-4. **Authentication failed**: Check pg_hba.conf allows your connection type
+3. **SSL errors**: Adjust `sslmode` option (disable, allow, prefer, require)
+4. **Authentication failed**: Verify credentials in `security/postgres_connections.xml`
 
 ### IBM DB2 Connection Issues
 

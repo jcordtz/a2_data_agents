@@ -29,15 +29,11 @@
 #   mssql,sql.example.com,1433,mydb,SALES,ORDERS,no
 #
 # OPTIONS:
-#   --output <dir>       Output directory for generated agents (default: ./agents)
-#   --deploy             Deploy agents to Azure after generation
-#   --resource-group     Azure resource group for deployment
-#   --location           Azure location (default: eastus)
+#   --output <dir>       Output directory for generated agents (default: ./generated_agents)
 #
 # EXAMPLES:
 #   ./generate_agents.sh tables.csv
-#   ./generate_agents.sh tables.csv --output ./my_agents --config my_config.ini
-#   ./generate_agents.sh tables.csv --deploy --resource-group mygroup
+#   ./generate_agents.sh tables.csv --output ./my_agents
 # =============================================================================
 
 set -e
@@ -51,22 +47,17 @@ NC='\033[0m' # No Color
 
 # Default configuration
 OUTPUT_DIR="./generated_agents"
-DEPLOY=false
-RESOURCE_GROUP=""
-LOCATION="eastus"
 
 # Print usage
 usage() {
     echo "Usage: $0 <csv_file> [options]"
     echo ""
     echo "Options:"
-    echo "  --output <dir>         Output directory for generated agents (default: ./agents)"
-    echo "  --deploy               Deploy agents to Azure after generation"
-    echo "  --resource-group <rg>  Azure resource group for deployment"
-    echo "  --location <loc>       Azure location (default: eastus)"
+    echo "  --output <dir>         Output directory for generated agents (default: ./generated_agents)"
     echo "  --help                 Show this help message"
     echo ""
     echo "Note: Database connections are looked up from security/ XML files based on hostname."
+    echo "      Use deploy_agents.sh to deploy generated agents to Azure."
     exit 1
 }
 
@@ -90,18 +81,6 @@ while [[ $# -gt 0 ]]; do
             OUTPUT_DIR="$2"
             shift 2
             ;;
-        --deploy)
-            DEPLOY=true
-            shift
-            ;;
-        --resource-group)
-            RESOURCE_GROUP="$2"
-            shift 2
-            ;;
-        --location)
-            LOCATION="$2"
-            shift 2
-            ;;
         --help)
             usage
             ;;
@@ -115,11 +94,6 @@ done
 # Validate inputs
 if [ ! -f "$CSV_FILE" ]; then
     print_error "CSV file not found: $CSV_FILE"
-    exit 1
-fi
-
-if [ "$DEPLOY" = true ] && [ -z "$RESOURCE_GROUP" ]; then
-    print_error "Resource group required for deployment (--resource-group)"
     exit 1
 fi
 
@@ -150,7 +124,6 @@ print_info "Table Agent Generator"
 print_info "========================================"
 print_info "CSV File: $CSV_FILE"
 print_info "Output: $OUTPUT_DIR"
-print_info "Deploy: $DEPLOY"
 print_info "========================================"
 
 # Count tables (excluding header)
@@ -254,27 +227,12 @@ tail -n +2 "$CSV_FILE" | while IFS=',' read -r DB_TYPE CSV_HOST CSV_PORT SERVICE
         FAILED=$((FAILED + 1))
         continue
     fi
-    
-    # Deploy if requested
-    if [ "$DEPLOY" = true ]; then
-        print_info "Deploying ${AGENT_NAME}..."
-        
-        if bash "${AGENT_DIR}/deploy.sh" \
-            --resource-group "$RESOURCE_GROUP" \
-            --location "$LOCATION"; then
-            print_success "Deployed: $AGENT_NAME"
-        else
-            print_warning "Deployment failed for $AGENT_NAME"
-        fi
-    fi
 done
 
 print_info "========================================"
 print_success "Agent generation complete!"
 print_info "Generated agents are in: $OUTPUT_DIR"
-if [ "$DEPLOY" = true ]; then
-    print_info "Agents deployed to resource group: $RESOURCE_GROUP"
-fi
+print_info "Use deploy_agents.sh to deploy agents to Azure."
 print_info "========================================"
 
 # List generated agents

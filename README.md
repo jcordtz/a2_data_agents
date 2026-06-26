@@ -83,28 +83,32 @@ An overall **chatbot interface** then orchestrates these agents through a Model 
 ```
 a2_data_agents/
 │
+├── security/                      # Security Configuration
+│   ├── connection_loader.py       # XML connection configuration loader
+│   ├── oracle_connections.xml     # Oracle connection definitions
+│   ├── mssql_connections.xml      # SQL Server connection definitions
+│   ├── postgres_connections.xml   # PostgreSQL connection definitions
+│   ├── ibmdb2_connections.xml     # IBM DB2 connection definitions
+│   └── README.md                  # Security configuration documentation
+│
 ├── databases/                     # Database Connectors Package
 │   ├── __init__.py                # Package exports (all connectors)
 │   │
 │   ├── oracle/                    # Oracle Database Module
 │   │   ├── __init__.py            # Module exports
-│   │   ├── oracle_connector.py    # SQLAlchemy-based connector (thick mode)
-│   │   └── oracle_config.ini      # Database connection configuration
+│   │   └── oracle_connector.py    # SQLAlchemy-based connector (thick mode)
 │   │
 │   ├── mssql/                     # Microsoft SQL Server Module
 │   │   ├── __init__.py            # Module exports
-│   │   ├── mssql_connector.py     # SQLAlchemy-based connector (pyodbc)
-│   │   └── mssql_config.ini       # Database connection configuration
+│   │   └── mssql_connector.py     # SQLAlchemy-based connector (pyodbc)
 │   │
 │   ├── postgres/                  # PostgreSQL Module
 │   │   ├── __init__.py            # Module exports
-│   │   ├── postgres_connector.py  # SQLAlchemy-based connector (psycopg2)
-│   │   └── postgres_config.ini    # Database connection configuration
+│   │   └── postgres_connector.py  # SQLAlchemy-based connector (psycopg2)
 │   │
 │   └── ibmdb2/                    # IBM DB2 LUW Module
 │       ├── __init__.py            # Module exports
-│       ├── ibmdb2_connector.py    # SQLAlchemy-based connector (ibm_db_sa)
-│       └── ibmdb2_config.ini      # Database connection configuration
+│       └── ibmdb2_connector.py    # SQLAlchemy-based connector (ibm_db_sa)
 │
 ├── agents/                        # AI Agent Module
 │   ├── __init__.py                # Module exports
@@ -160,9 +164,10 @@ a2_data_agents/
 │       ├── providers.tf           # Provider configuration
 │       └── terraform.tfvars.example  # Example variable values
 │
-├── agent_config.ini               # Main agent configuration template
+├── agent_config.ini               # Azure OpenAI configuration template
+├── run.sh                         # Master orchestration script
 ├── deploy.sh                      # Main deployment script
-├── generate_agents.sh             # Batch agent generation from CSV
+├── generate_agents.sh             # Agent generation from CSV
 ├── sample_tables.csv              # Example table list for generation
 ├── requirements.txt               # Python dependencies
 ├── Dockerfile                     # Container image for main agent
@@ -204,109 +209,102 @@ cd a2_data_agents
 pip install -r requirements.txt
 ```
 
-### 2. Configure Database Connection
+### 2. Configure Database Connections
 
-Choose the database(s) you want to use:
+Database connections are configured via XML files in the `security/` directory. Each database type has its own XML file with connection definitions.
 
 #### Oracle
 
-Edit `databases/oracle/oracle_config.ini`:
+Edit `security/oracle_connections.xml`:
 
-```ini
-[oracle]
-host = your-oracle-host
-port = 1521
-service_name = YOUR_SERVICE
-schema = YOUR_SCHEMA
-username = <your-username>
-password = <your-password>
+```xml
+<connections>
+    <connection id="oracle_myhost_hr" type="oracle" auth="password">
+        <host>your-oracle-host</host>
+        <port>1521</port>
+        <service_name>YOUR_SERVICE</service_name>
+        <schema>YOUR_SCHEMA</schema>
+        <credentials>
+            <username>your-username</username>
+            <password>your-password</password>
+        </credentials>
+    </connection>
+</connections>
 ```
 
 #### SQL Server
 
-Edit `databases/mssql/mssql_config.ini`:
+Edit `security/mssql_connections.xml`:
 
-```ini
-[mssql]
-host = your-sql-server-host
-port = 1433
-database = your_database
-
-# SQL Authentication
-username = <your-username>
-password = <your-password>
-
-# OR use Windows/Integrated authentication
-# trusted_connection = True
-
-# Schema (defaults to 'dbo')
-schema = dbo
-
-# Connection pooling
-min_connections = 1
-max_connections = 5
-
-# Language for natural language responses
-country = US
+```xml
+<connections>
+    <connection id="mssql_myhost_hr" type="mssql" auth="sql_password">
+        <host>your-sql-server-host</host>
+        <port>1433</port>
+        <database>your_database</database>
+        <schema>dbo</schema>
+        <credentials>
+            <username>your-username</username>
+            <password>your-password</password>
+        </credentials>
+    </connection>
+</connections>
 ```
 
 #### PostgreSQL
 
-Edit `databases/postgres/postgres_config.ini`:
+Edit `security/postgres_connections.xml`:
 
-```ini
-[postgres]
-host = your-postgres-host
-port = 5432
-database = your_database
-
-# Authentication
-username = <your-username>
-password = <your-password>
-
-# Schema (defaults to 'public')
-schema = public
-
-# Connection pooling
-min_connections = 1
-max_connections = 5
-
-# SSL mode (disable, allow, prefer, require, verify-ca, verify-full)
-sslmode = prefer
-
-# Language for natural language responses
-country = US
+```xml
+<connections>
+    <connection id="postgres_myhost_sales" type="postgres" auth="password">
+        <host>your-postgres-host</host>
+        <port>5432</port>
+        <database>your_database</database>
+        <schema>public</schema>
+        <credentials>
+            <username>your-username</username>
+            <password>your-password</password>
+        </credentials>
+    </connection>
+</connections>
 ```
 
 #### IBM DB2 LUW
 
-Edit `databases/ibmdb2/ibmdb2_config.ini`:
+Edit `security/ibmdb2_connections.xml`:
 
-```ini
-[ibmdb2]
-host = your-db2-host
-port = 50000
-database = your_database
-
-# Authentication
-username = <your-username>
-password = <your-password>
-
-# Schema (defaults to username if not specified)
-schema = 
-
-# Connection pooling
-min_connections = 1
-max_connections = 5
-
-# SSL (optional)
-# ssl = True
-
-# Language for natural language responses
-country = US
+```xml
+<connections>
+    <connection id="db2_myhost_sales" type="db2" auth="password">
+        <host>your-db2-host</host>
+        <port>50000</port>
+        <database>your_database</database>
+        <schema>YOUR_SCHEMA</schema>
+        <credentials>
+            <username>your-username</username>
+            <password>your-password</password>
+        </credentials>
+    </connection>
+</connections>
 ```
 
+See [security/README.md](security/README.md) for advanced authentication options including Azure Key Vault, Entra ID, Kerberos, and certificate-based authentication.
+
 ### 3. Configure Azure OpenAI
+
+Azure OpenAI settings can be provided via environment variables or `agent_config.ini`:
+
+**Option 1: Environment Variables (recommended for production)**
+
+```bash
+export AZURE_OPENAI_ENDPOINT=https://your-openai.openai.azure.com/
+export AZURE_OPENAI_API_KEY=your-api-key
+export AZURE_OPENAI_DEPLOYMENT=gpt-4o
+export AZURE_OPENAI_API_VERSION=2024-02-15-preview
+```
+
+**Option 2: Configuration File**
 
 Edit `agent_config.ini`:
 
@@ -316,9 +314,6 @@ endpoint = https://your-openai.openai.azure.com/
 api_key = your-api-key
 deployment_name = gpt-4o
 api_version = 2024-02-15-preview
-
-[agent]
-language = English
 ```
 
 ### 4. Run Locally
@@ -354,29 +349,50 @@ curl -X POST http://localhost:7071/api/reset
 ### Generate Table-Specific Agents
 
 ```bash
-# Generate a single agent
+# Generate a single agent (connection looked up from security/ XML files)
 python agents/agent_generator.py \
-  --config databases/oracle/oracle_config.ini \
+  --host db.example.com \
   --schema HR \
   --table EMPLOYEES \
   --output ./generated_agents/hr_employees \
   --purview yes \
-  --host db.example.com \
   --port 1521 \
   --db-type oracle \
   --service-name ORCL
 
 # Generate multiple agents from CSV
 # CSV format: database_type,host,port,service_name,schema,table_name,purview
-# All columns are required
 ./generate_agents.sh sample_tables.csv --output ./generated_agents
-
-# The config file is automatically selected based on database_type:
-#   oracle   -> databases/oracle/oracle_config.ini
-#   mssql    -> databases/mssql/mssql_config.ini
-#   postgres -> databases/postgres/postgres_config.ini
-#   db2      -> databases/ibmdb2/ibmdb2_config.ini
 ```
+
+### Master Orchestration Script
+
+The `run.sh` script orchestrates all solution components in the correct order:
+
+```bash
+# Run all steps (generate, deploy agents, deploy MCP, register, deploy chatbot)
+./run.sh --all --csv sample_tables.csv --resource-group my-rg
+
+# Run only agent generation
+./run.sh --generate --csv tables.csv
+
+# Deploy agents and MCP server only
+./run.sh --deploy --mcp --resource-group my-rg
+
+# Register agents with existing MCP server
+./run.sh --register --mcp-url https://mcp.example.com
+
+# Preview without executing (dry run)
+./run.sh --all --resource-group my-rg --dry-run
+```
+
+**Available steps:**
+- `--generate` - Generate agent code from CSV
+- `--deploy` - Deploy generated agents to Azure Functions
+- `--mcp` - Deploy MCP server to Azure
+- `--register` - Register agents with MCP server
+- `--chatbot` - Deploy chatbot to Azure Static Web Apps
+- `--all` - Run all steps in order
 
 ### Deploy to Azure
 
@@ -477,6 +493,7 @@ az deployment group create \
 | **MSSQL Connector** | SQLAlchemy-based SQL Server connectivity with pyodbc, connection pooling, and DataFrame support | See docstrings in [databases/mssql/mssql_connector.py](databases/mssql/mssql_connector.py) |
 | **PostgreSQL Connector** | SQLAlchemy-based PostgreSQL connectivity with psycopg2, connection pooling, and DataFrame support | See docstrings in [databases/postgres/postgres_connector.py](databases/postgres/postgres_connector.py) |
 | **IBM DB2 Connector** | SQLAlchemy-based IBM DB2 LUW connectivity with ibm_db_sa, connection pooling, and DataFrame support | See docstrings in [databases/ibmdb2/ibmdb2_connector.py](databases/ibmdb2/ibmdb2_connector.py) |
+| **Connection Loader** | XML-based connection configuration with Key Vault integration | See [security/README.md](security/README.md) |
 | **Data Agent** | Azure OpenAI-powered agent for natural language to SQL translation | See docstrings in [agents/data_agent.py](agents/data_agent.py) |
 | **Function App** | Azure Function HTTP endpoints for the data agent | See docstrings in [agents/function_app.py](agents/function_app.py) |
 | **Agent Generator** | Generates standalone Azure Function agents for specific tables | See docstrings in [agents/agent_generator.py](agents/agent_generator.py) |
@@ -488,46 +505,39 @@ az deployment group create \
 
 ## Configuration Reference
 
-### Oracle Configuration (`databases/oracle/oracle_config.ini`)
+### Security Configuration (`security/*.xml`)
 
-```ini
-[oracle]
-host = localhost          # Oracle host
-port = 1521               # Oracle port
-service_name = ORCL       # Oracle service name
-schema = HR               # Default schema
-username = <your-username>        # Database username
-password = <your-password>         # Database password
-lib_dir = /path/to/instantclient  # Optional: Oracle Instant Client path
+Database connections are defined in XML files with support for multiple authentication methods:
+
+```xml
+<!-- Password authentication -->
+<connection id="oracle_prod" type="oracle" auth="password">
+    <host>db.example.com</host>
+    <port>1521</port>
+    <service_name>ORCL</service_name>
+    <schema>HR</schema>
+    <credentials>
+        <username>hr_user</username>
+        <password>secret123</password>
+    </credentials>
+</connection>
+
+<!-- Azure Key Vault authentication -->
+<connection id="oracle_prod_keyvault" type="oracle" auth="azure_keyvault">
+    <host>db.example.com</host>
+    <port>1521</port>
+    <service_name>ORCL</service_name>
+    <schema>HR</schema>
+    <keyvault>
+        <vault_url>https://my-vault.vault.azure.net/</vault_url>
+        <username_secret>oracle-username</username_secret>
+        <password_secret>oracle-password</password_secret>
+        <auth_method>managed_identity</auth_method>
+    </keyvault>
+</connection>
 ```
 
-### SQL Server Configuration (`databases/mssql/mssql_config.ini`)
-
-```ini
-[mssql]
-host = localhost          # SQL Server host
-port = 1433               # SQL Server port
-database = master         # Database name
-schema = dbo              # Default schema
-username = <your-username>             # Database username
-password = <your-password>         # Database password
-driver = ODBC Driver 18 for SQL Server  # ODBC driver name
-trusted_connection = False  # Use Windows authentication
-trust_server_certificate = True  # Trust self-signed certs
-```
-
-### PostgreSQL Configuration (`databases/postgres/postgres_config.ini`)
-
-```ini
-[postgres]
-host = localhost          # PostgreSQL host
-port = 5432               # PostgreSQL port
-database = postgres       # Database name
-schema = public           # Default schema
-username = <your-username>       # Database username
-password = <your-password>         # Database password
-sslmode = prefer          # SSL mode (disable, allow, prefer, require)
-```
+See [security/README.md](security/README.md) for all supported authentication methods.
 
 ### Agent Configuration (`agent_config.ini`)
 
@@ -537,17 +547,7 @@ endpoint = https://your-openai.openai.azure.com/
 api_key = your-api-key
 deployment_name = gpt-4o
 api_version = 2024-02-15-preview
-
-[agent]
-language = English        # Response language (30+ supported)
-max_tokens = 4096         # Max response tokens
-temperature = 0.7         # Response creativity (0-1)
-
-[oracle]
-# Can also include Oracle settings here
-host = localhost
-port = 1521
-service_name = ORCL
+```
 ```
 
 ### Purview Configuration (`purview/purview_config.ini`)
@@ -614,14 +614,11 @@ pytest tests/
 ### Local Development
 
 ```bash
-# Test database connectors
-python -c "from databases.oracle import OracleConnector; print('OK')"
-python -c "from databases.mssql import MSSQLConnector; print('OK')"
-python -c "from databases.postgres import PostgresConnector; print('OK')"
-python -c "from databases.ibmdb2 import IBMDB2Connector; print('OK')"
-
-# Or import all at once
-python -c "from databases import OracleConnector, MSSQLConnector, PostgresConnector, IBMDB2Connector; print('OK')"
+# Test database connectors (using from_host() with security XML files)
+python -c "from databases.oracle import OracleConnector; c = OracleConnector.from_host('db.example.com'); print('OK')"
+python -c "from databases.mssql import MSSQLConnector; c = MSSQLConnector.from_host('sql.example.com'); print('OK')"
+python -c "from databases.postgres import PostgresConnector; c = PostgresConnector.from_host('pg.example.com'); print('OK')"
+python -c "from databases.ibmdb2 import IBMDB2Connector; c = IBMDB2Connector.from_host('db2.example.com'); print('OK')"
 
 # Test data agent
 python -c "from agents import DataAgent; print('OK')"
@@ -758,7 +755,7 @@ Please ensure all code includes appropriate documentation headers.
 - Python 3.11+
 - Azure CLI
 - Azure Functions Core Tools
-- Oracle database access
+- Database access (Oracle, SQL Server, PostgreSQL, or IBM DB2)
 
 ### 2. Install Dependencies
 
@@ -766,29 +763,33 @@ Please ensure all code includes appropriate documentation headers.
 pip install -r requirements.txt
 ```
 
-### 3. Configure
+### 3. Configure Connections
 
-Copy and edit the configuration:
+Add your database connection to the appropriate XML file in `security/`:
 
 ```bash
-cp databases/oracle/oracle_config.ini databases/oracle/my_oracle_config.ini
-cp agent_config.ini my_config.ini
-# Edit both files with your settings
+# Edit the XML file for your database type
+# See security/README.md for authentication options
+nano security/oracle_connections.xml
 ```
 
-### 4. Local Development
+### 4. Configure Azure OpenAI
 
 ```bash
-# Start the function locally
-func start
+# Set environment variables
+export AZURE_OPENAI_ENDPOINT=https://your-openai.openai.azure.com/
+export AZURE_OPENAI_API_KEY=your-api-key
+export AZURE_OPENAI_DEPLOYMENT=gpt-4o
 ```
 
-### 5. Deploy to Azure
+### 5. Run Everything
 
 ```bash
-# Edit infra/main.parameters.json with your values
-chmod +x deploy.sh
-./deploy.sh
+# Use the master script to run all components
+./run.sh --all --csv sample_tables.csv --resource-group my-rg
+
+# Or run individual steps
+./run.sh --generate --csv sample_tables.csv  # Generate agents only
 ```
 
 ## Generating Table-Specific Agents
@@ -796,20 +797,23 @@ chmod +x deploy.sh
 Create individual agents for specific tables using the generator:
 
 ```bash
-# Create a CSV with database_type, host, schema, table_name, and purview columns
+# Create a CSV with database_type, host, port, service_name, schema, table_name, purview columns
 cat > tables.csv << EOF
-database_type,host,schema,table_name,purview
-oracle,db.example.com,HR,EMPLOYEES,yes
-mssql,sqlserver.example.com,HR,DEPARTMENTS,no
-postgres,pghost.example.com,SALES,ORDERS,yes
-db2,db2host.example.com,ANALYTICS,REPORTS,no
+database_type,host,port,service_name,schema,table_name,purview
+oracle,db.example.com,1521,ORCL,HR,EMPLOYEES,yes
+mssql,sqlserver.example.com,1433,mydb,HR,DEPARTMENTS,no
+postgres,pghost.example.com,5432,salesdb,SALES,ORDERS,yes
+db2,db2host.example.com,50000,DWDB,ANALYTICS,REPORTS,no
 EOF
 
-# Generate agents (config is automatically selected based on database_type)
+# Generate agents (connections looked up from security/ XML files)
 ./generate_agents.sh tables.csv --output ./generated_agents
 
-# Generate and deploy
-./generate_agents.sh tables.csv --deploy --resource-group mygroup
+# Deploy using the master script
+./run.sh --deploy --resource-group mygroup --output ./generated_agents
+
+# Or run all steps at once
+./run.sh --all --csv tables.csv --resource-group mygroup
 
 # Note: If the output directory exists and is not empty, you will be
 # prompted to confirm before continuing.

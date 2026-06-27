@@ -808,10 +808,15 @@ param oracleUsername string
 @secure()
 param oraclePassword string
 
-var functionAppName = '${{baseName}}-func-${{uniqueString(resourceGroup().id)}}'
-var storageAccountName = take(replace('${{baseName}}st${{uniqueString(resourceGroup().id)}}', '-', ''), 24)
-var appServicePlanName = '${{baseName}}-plan'
-var appInsightsName = '${{baseName}}-insights'
+// Sanitize names for Azure resources (no dots allowed)
+var sanitizedResourceName = replace(replace(baseName, '.', '-'), '_', '-')
+var functionAppName = '${{sanitizedResourceName}}-func-${{uniqueString(resourceGroup().id)}}'
+// Storage account names: max 24 chars, lowercase letters and numbers only
+// Use first 10 chars of sanitized baseName + 'st' + 12 char uniqueString = 24 chars max
+var sanitizedBaseName = toLower(replace(replace(replace(baseName, '_', ''), '-', ''), '.', ''))
+var storageAccountName = take('${{take(sanitizedBaseName, 10)}}st${{uniqueString(resourceGroup().id)}}', 24)
+var appServicePlanName = '${{sanitizedResourceName}}-plan'
+var appInsightsName = '${{sanitizedResourceName}}-insights'
 
 resource storageAccount 'Microsoft.Storage/storageAccounts@2023-01-01' = {{
   name: storageAccountName

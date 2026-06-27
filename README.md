@@ -136,6 +136,8 @@ a2_data_agents/
 │
 ├── chatbot/                       # Chatbot Web Interface
 │   ├── src/                       # React source code
+│   │   ├── App.jsx                # Main application component
+│   │   ├── main.jsx               # Application entry point
 │   │   ├── components/            # UI components (Chat, Header, etc.)
 │   │   ├── hooks/                 # Custom React hooks
 │   │   ├── services/              # API services
@@ -144,18 +146,20 @@ a2_data_agents/
 │   │   ├── query/                 # Query endpoint
 │   │   ├── agents/                # List agents endpoint
 │   │   └── health/                # Health check
+│   ├── public/                    # Static assets
 │   ├── infra/                     # Chatbot infrastructure
 │   │   ├── main.bicep             # Static Web Apps + App Insights
 │   │   └── main.parameters.json   # Deployment parameters
+│   ├── index.html                 # HTML entry point
 │   ├── package.json               # Node.js dependencies
 │   ├── vite.config.js             # Vite build configuration
 │   ├── staticwebapp.config.json   # Azure Static Web Apps config
 │   ├── deploy.sh                  # Deployment script
 │   └── README.md                  # Chatbot documentation
 │
-├── infra/                         # Main Infrastructure
+├── infra/                         # Infrastructure Templates
 │   ├── bicep/                     # Azure Bicep templates
-│   │   ├── main.bicep             # Azure Function + OpenAI + Storage + Chatbot
+│   │   ├── main.bicep             # Azure Function + OpenAI + Storage
 │   │   └── main.parameters.json   # Deployment parameters
 │   └── terraform/                 # Terraform configuration
 │       ├── main.tf                # Main infrastructure resources
@@ -164,15 +168,10 @@ a2_data_agents/
 │       ├── providers.tf           # Provider configuration
 │       └── terraform.tfvars.example  # Example variable values
 │
-├── agent_config.ini               # Azure OpenAI configuration template
 ├── run.sh                         # Master orchestration script
-├── deploy.sh                      # Main deployment script
 ├── generate_agents.sh             # Agent generation from CSV
 ├── sample_tables.csv              # Example table list for generation
 ├── requirements.txt               # Python dependencies
-├── Dockerfile                     # Container image for main agent
-├── host.json                      # Azure Functions host configuration
-├── local.settings.json            # Local development settings
 ├── LICENSE                        # MIT License
 └── README.md                      # This file
 ```
@@ -394,16 +393,6 @@ The `run.sh` script orchestrates all solution components in the correct order:
 - `--chatbot` - Deploy chatbot to Azure Static Web Apps
 - `--all` - Run all steps in order
 
-### Deploy to Azure
-
-```bash
-# Deploy main agent
-./deploy.sh
-
-# Or with custom settings
-RESOURCE_GROUP=mygroup LOCATION=westus2 ./deploy.sh
-```
-
 ### MCP Server Operations
 
 ```bash
@@ -620,11 +609,8 @@ python -c "from databases.mssql import MSSQLConnector; c = MSSQLConnector.from_h
 python -c "from databases.postgres import PostgresConnector; c = PostgresConnector.from_host('pg.example.com'); print('OK')"
 python -c "from databases.ibmdb2 import IBMDB2Connector; c = IBMDB2Connector.from_host('db2.example.com'); print('OK')"
 
-# Test data agent
-python -c "from agents import DataAgent; print('OK')"
-
-# Start Azure Functions locally
-cd agents && func start
+# Start a generated agent locally
+cd generated_agents/oracle_myhost_HR_EMPLOYEES && func start
 
 # Start MCP server locally
 cd mcp && python mcp_server.py

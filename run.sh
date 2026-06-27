@@ -339,13 +339,17 @@ if [ "$RUN_DEPLOY" = true ]; then
                         export RESOURCE_GROUP="$RESOURCE_GROUP"
                         export LOCATION="$LOCATION"
                         
-                        if bash "${agent_dir}deploy.sh"; then
+                        # Change to agent directory before running deploy.sh
+                        # (deploy.sh uses relative paths like infra/main.bicep)
+                        pushd "$agent_dir" > /dev/null
+                        if bash deploy.sh; then
                             print_success "Deployed: $agent_name"
                             DEPLOYED=$((DEPLOYED + 1))
                         else
                             print_warning "Failed to deploy: $agent_name"
                             FAILED=$((FAILED + 1))
                         fi
+                        popd > /dev/null
                     else
                         print_warning "No deploy.sh found in $agent_dir"
                         FAILED=$((FAILED + 1))

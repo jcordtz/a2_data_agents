@@ -1,7 +1,5 @@
 # Ignore config files with secrets
 agent_config.ini
-local.settings.json
-infra/main.parameters.json
 
 # Security XML files with credentials
 security/*_connections.xml

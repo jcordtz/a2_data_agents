@@ -760,9 +760,74 @@ while [[ $# -gt 0 ]]; do
     esac
 done
 
+# Detect OS and find Azure Functions Core Tools
+find_func_command() {{
+    # Check if func is already in PATH
+    if command -v func &> /dev/null; then
+        echo "func"
+        return 0
+    fi
+    
+    # Detect OS
+    OS_TYPE="$(uname -s)"
+    
+    case "$OS_TYPE" in
+        Darwin)
+            # macOS - check Homebrew locations
+            if [ -x "/opt/homebrew/bin/func" ]; then
+                echo "/opt/homebrew/bin/func"
+                return 0
+            elif [ -x "/usr/local/bin/func" ]; then
+                echo "/usr/local/bin/func"
+                return 0
+            fi
+            # Try to find via Homebrew
+            if command -v brew &> /dev/null; then
+                BREW_PREFIX=$(brew --prefix 2>/dev/null)
+                if [ -x "$BREW_PREFIX/bin/func" ]; then
+                    echo "$BREW_PREFIX/bin/func"
+                    return 0
+                fi
+            fi
+            ;;
+        Linux)
+            # Linux - check common locations
+            if [ -x "/usr/bin/func" ]; then
+                echo "/usr/bin/func"
+                return 0
+            elif [ -x "$HOME/.azure-functions-core-tools/func" ]; then
+                echo "$HOME/.azure-functions-core-tools/func"
+                return 0
+            fi
+            ;;
+        MINGW*|MSYS*|CYGWIN*)
+            # Windows Git Bash / WSL
+            if [ -x "/c/Program Files/Microsoft/Azure Functions Core Tools/func.exe" ]; then
+                echo "/c/Program Files/Microsoft/Azure Functions Core Tools/func.exe"
+                return 0
+            fi
+            ;;
+    esac
+    
+    # Not found
+    return 1
+}}
+
+FUNC_CMD=$(find_func_command)
+if [ -z "$FUNC_CMD" ]; then
+    echo "ERROR: Azure Functions Core Tools (func) not found."
+    echo ""
+    echo "Please install it:"
+    echo "  macOS:   brew tap azure/functions && brew install azure-functions-core-tools@4"
+    echo "  Linux:   See https://learn.microsoft.com/en-us/azure/azure-functions/functions-run-local"
+    echo "  Windows: npm install -g azure-functions-core-tools@4"
+    exit 1
+fi
+
 echo "Deploying {agent_name} agent..."
 echo "Resource Group: $RESOURCE_GROUP"
 echo "Location: $LOCATION"
+echo "Using func command: $FUNC_CMD"
 
 # Create resource group
 az group create --name "$RESOURCE_GROUP" --location "$LOCATION" --output none
@@ -778,7 +843,7 @@ DEPLOYMENT_OUTPUT=$(az deployment group create \\
 FUNCTION_APP_NAME=$(echo "$DEPLOYMENT_OUTPUT" | jq -r '.functionAppName.value')
 
 echo "Deploying function code to $FUNCTION_APP_NAME..."
-func azure functionapp publish "$FUNCTION_APP_NAME" --python
+"$FUNC_CMD" azure functionapp publish "$FUNCTION_APP_NAME" --python
 
 echo "Deployment complete!"
 echo "Function App: $FUNCTION_APP_NAME"

@@ -142,7 +142,8 @@ resource containerApp 'Microsoft.App/containerApps@2023-05-01' = {
     configuration: {
       ingress: {
         external: true
-        targetPort: 8080
+        // Use port 80 initially for placeholder image; deploy.sh updates to 8080 with real image
+        targetPort: 80
         transport: 'http'
         allowInsecure: false
       }

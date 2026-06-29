@@ -220,7 +220,13 @@ if [ "$USE_CONTAINER_APPS" = true ]; then
         if [ -n "$CONTAINER_APP_NAME" ]; then
             print_info "Updating container app with MCP server image..."
             
-            # Update with the new image, volume mount, and min replicas
+            # Update with the new image, correct port, and min replicas
+            az containerapp ingress update \
+                --name "$CONTAINER_APP_NAME" \
+                --resource-group "$RESOURCE_GROUP" \
+                --target-port 8080 \
+                --output none
+            
             az containerapp update \
                 --name "$CONTAINER_APP_NAME" \
                 --resource-group "$RESOURCE_GROUP" \

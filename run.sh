@@ -314,12 +314,17 @@ if [ "$RUN_GENERATE" = true ]; then
     fi
     
     if [ "$DRY_RUN" = true ]; then
-        print_info "[DRY RUN] Would run: ./generate_agents.sh $CSV_FILE --output $OUTPUT_DIR"
+        print_info "[DRY RUN] Would run: ./generate_agents.sh --csv $CSV_FILE --output $OUTPUT_DIR"
     else
         print_info "Generating agents from $CSV_FILE..."
         
-        # Run generate script with auto-confirm
-        echo "yes" | "$SCRIPT_DIR/generate_agents.sh" "$CSV_FILE" --output "$OUTPUT_DIR"
+        # Build generate args
+        GENERATE_ARGS="--csv $CSV_FILE --output $OUTPUT_DIR"
+        if [ "$AUTO_YES" = true ]; then
+            GENERATE_ARGS="$GENERATE_ARGS --yes"
+        fi
+        
+        "$SCRIPT_DIR/generate_agents.sh" $GENERATE_ARGS
         
         print_success "Agent generation complete!"
     fi

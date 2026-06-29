@@ -486,11 +486,12 @@ if [ "$RUN_CHATBOT" = true ]; then
     fi
     
     if [ "$DRY_RUN" = true ]; then
-        print_info "[DRY RUN] Would run: chatbot/deploy.sh --resource-group $RESOURCE_GROUP --mcp-url $EFFECTIVE_MCP_URL"
+        print_info "[DRY RUN] Would run: chatbot/deploy.sh --resource-group $RESOURCE_GROUP --location westeurope --mcp-url $EFFECTIVE_MCP_URL"
     else
-        print_info "Deploying chatbot..."
+        print_info "Deploying chatbot (always to westeurope for Static Web Apps)..."
         
-        CHATBOT_ARGS="--resource-group $RESOURCE_GROUP --location $LOCATION --mcp-url $EFFECTIVE_MCP_URL"
+        # Chatbot (Static Web Apps) always deploys to westeurope
+        CHATBOT_ARGS="--resource-group $RESOURCE_GROUP --location westeurope --mcp-url $EFFECTIVE_MCP_URL"
         
         if [ -n "$MCP_TOKEN" ]; then
             CHATBOT_ARGS="$CHATBOT_ARGS --mcp-token $MCP_TOKEN"

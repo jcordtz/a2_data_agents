@@ -778,32 +778,52 @@ echo "Location: $LOCATION"
 # Create resource group
 az group create --name "$RESOURCE_GROUP" --location "$LOCATION" --output none
 
-# Clean up existing Function App if it exists (allows clean redeployment)
-# Get the expected function app name pattern
-SANITIZED_NAME=$(echo "{agent_name}" | tr '.' '-' | tr '_' '-')
-EXISTING_FUNC=$(az functionapp list \\
-    --resource-group "$RESOURCE_GROUP" \\
-    --query "[?starts_with(name, '$SANITIZED_NAME')].name" \\
-    --output tsv 2>/dev/null || true)
-
-if [ -n "$EXISTING_FUNC" ]; then
-    echo "Found existing Function App: $EXISTING_FUNC"
-    echo "Deleting existing Function App for clean redeployment..."
-    az functionapp delete \\
-        --name "$EXISTING_FUNC" \\
-        --resource-group "$RESOURCE_GROUP" \\
-        --output none 2>/dev/null || true
-fi
-
 # Deploy infrastructure (Elastic Premium plan for remote build support)
+echo "Deploying infrastructure..."
 DEPLOYMENT_OUTPUT=$(az deployment group create \\
     --resource-group "$RESOURCE_GROUP" \\
     --template-file infra/main.bicep \\
     --parameters @infra/main.parameters.json \\
     --query "properties.outputs" \\
-    --output json)
+    --output json 2>&1) || {{
+    echo "ERROR: Infrastructure deployment failed"
+    echo "$DEPLOYMENT_OUTPUT"
+    exit 1
+}}
 
-FUNCTION_APP_NAME=$(echo "$DEPLOYMENT_OUTPUT" | jq -r '.functionAppName.value')
+# Extract function app name (use jq if available, otherwise grep/sed)
+if command -v jq &> /dev/null; then
+    FUNCTION_APP_NAME=$(echo "$DEPLOYMENT_OUTPUT" | jq -r '.functionAppName.value')
+else
+    FUNCTION_APP_NAME=$(echo "$DEPLOYMENT_OUTPUT" | grep -o '"functionAppName"[^}}]*' | grep -o '"value"[^"]*"[^"]*"' | sed 's/.*"\\([^"]*\\)"$/\\1/')
+fi
+
+# Verify function app name was extracted
+if [ -z "$FUNCTION_APP_NAME" ] || [ "$FUNCTION_APP_NAME" = "null" ]; then
+    echo "ERROR: Failed to extract function app name from deployment output"
+    echo "Deployment output: $DEPLOYMENT_OUTPUT"
+    exit 1
+fi
+
+echo "Function App Name: $FUNCTION_APP_NAME"
+
+# Wait for Function App to be ready
+echo "Waiting for Function App to be ready..."
+MAX_RETRIES=30
+RETRY_COUNT=0
+while [ $RETRY_COUNT -lt $MAX_RETRIES ]; do
+    if az functionapp show --name "$FUNCTION_APP_NAME" --resource-group "$RESOURCE_GROUP" --query "state" -o tsv 2>/dev/null | grep -qi "running"; then
+        echo "Function App is ready"
+        break
+    fi
+    RETRY_COUNT=$((RETRY_COUNT + 1))
+    if [ $RETRY_COUNT -eq $MAX_RETRIES ]; then
+        echo "ERROR: Function App not ready after $MAX_RETRIES attempts"
+        exit 1
+    fi
+    echo "Waiting... ($RETRY_COUNT/$MAX_RETRIES)"
+    sleep 5
+done
 
 echo "Deploying function code to $FUNCTION_APP_NAME (remote build)..."
 
@@ -825,6 +845,7 @@ rm -f "$DEPLOY_ZIP"
 
 echo "Deployment complete!"
 echo "Function App: $FUNCTION_APP_NAME"
+echo "Function URL: https://$FUNCTION_APP_NAME.azurewebsites.net"
 '''
     
     deploy_path = output_path / "deploy.sh"

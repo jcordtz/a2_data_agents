@@ -29,7 +29,9 @@ function App() {
       }
     } catch (err) {
       console.error('Failed to load agents:', err)
-      setError('Failed to connect to the server. Please check your connection.')
+      // More descriptive error message
+      const serverUrl = import.meta.env.VITE_MCP_SERVER_URL || '(not configured)'
+      setError(`Failed to connect to MCP server at ${serverUrl}. ${err.message}`)
     } finally {
       setLoading(false)
     }
@@ -50,7 +52,10 @@ function App() {
         {loading ? (
           <div className="loading-container">
             <div className="loading-spinner"></div>
-            <p>Connecting to server...</p>
+            <p>Connecting to MCP server...</p>
+            <p className="loading-detail">
+              {import.meta.env.VITE_MCP_SERVER_URL || 'No server URL configured'}
+            </p>
           </div>
         ) : error ? (
           <div className="error-container">

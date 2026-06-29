@@ -41,11 +41,16 @@ param authToken string = ''
 
 // Variables
 var uniqueSuffix = uniqueString(resourceGroup().id)
-var acrName = replace('${baseName}acr${uniqueSuffix}', '-', '')
+var sanitizedBaseName = replace(replace(baseName, '-', ''), '_', '')
+var acrName = '${take(sanitizedBaseName, 30)}acr${uniqueSuffix}'
 var logAnalyticsName = '${baseName}-logs'
 var containerEnvName = '${baseName}-env'
 var containerAppName = '${baseName}-app'
-var storageName = take(replace('${baseName}st${uniqueSuffix}', '-', ''), 24)
+// Storage account: 3-24 chars, lowercase alphanumeric only
+// uniqueSuffix is 13 chars, 'st' is 2 chars, so we have 9 chars for base name
+var storageName = toLower(take('${take(sanitizedBaseName, 9)}st${uniqueSuffix}', 24))
+// Azure Container Apps requires non-empty secret values
+var effectiveAuthToken = empty(authToken) ? 'not-configured' : authToken
 
 // Log Analytics Workspace
 resource logAnalytics 'Microsoft.OperationalInsights/workspaces@2022-10-01' = {
@@ -61,7 +66,7 @@ resource logAnalytics 'Microsoft.OperationalInsights/workspaces@2022-10-01' = {
 
 // Azure Container Registry
 resource acr 'Microsoft.ContainerRegistry/registries@2023-07-01' = {
-  name: take(acrName, 50)
+  name: acrName
   location: location
   sku: {
     name: 'Basic'
@@ -155,7 +160,7 @@ resource containerApp 'Microsoft.App/containerApps@2023-05-01' = {
         }
         {
           name: 'auth-token'
-          value: authToken
+          value: effectiveAuthToken
         }
         {
           name: 'storage-connection'
@@ -167,7 +172,8 @@ resource containerApp 'Microsoft.App/containerApps@2023-05-01' = {
       containers: [
         {
           name: 'mcp-server'
-          // Initial image - will be updated after ACR build
+          // Initial placeholder image - will be replaced after ACR build
+          // Using a simple nginx image that starts quickly without volume dependencies
           image: 'mcr.microsoft.com/azuredocs/containerapps-helloworld:latest'
           resources: {
             cpu: json('0.5')
@@ -187,23 +193,11 @@ resource containerApp 'Microsoft.App/containerApps@2023-05-01' = {
               secretRef: 'auth-token'
             }
           ]
-          volumeMounts: [
-            {
-              volumeName: 'mcp-data'
-              mountPath: '/data'
-            }
-          ]
-        }
-      ]
-      volumes: [
-        {
-          name: 'mcp-data'
-          storageName: storageMount.name
-          storageType: 'AzureFile'
+          // Note: Volume mounts will be added when updating with actual MCP server image
         }
       ]
       scale: {
-        minReplicas: 1
+        minReplicas: 0
         maxReplicas: 3
         rules: [
           {

@@ -7,6 +7,8 @@
  * Body: { agentId: string, question: string }
  */
 
+const fetch = require('node-fetch')
+
 const MCP_SERVER_URL = process.env.MCP_SERVER_URL || 'http://localhost:8080'
 const MCP_AUTH_TOKEN = process.env.MCP_AUTH_TOKEN || ''
 

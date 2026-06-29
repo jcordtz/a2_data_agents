@@ -120,6 +120,7 @@ var functionAppName = '${baseName}-func-${uniqueString(resourceGroup().id)}'
 var storageAccountName = '${baseName}st${uniqueString(resourceGroup().id)}'
 var appServicePlanName = '${baseName}-plan'
 var appInsightsName = '${baseName}-insights'
+var logAnalyticsName = '${baseName}-logs'
 var openAIName = '${baseName}-openai-${uniqueString(resourceGroup().id)}'
 
 // Reference existing Key Vault
@@ -141,7 +142,19 @@ resource storageAccount 'Microsoft.Storage/storageAccounts@2023-01-01' = {
   }
 }
 
-// Application Insights
+// Log Analytics Workspace (shared, in the same resource group)
+resource logAnalytics 'Microsoft.OperationalInsights/workspaces@2022-10-01' = {
+  name: logAnalyticsName
+  location: location
+  properties: {
+    sku: {
+      name: 'PerGB2018'
+    }
+    retentionInDays: 30
+  }
+}
+
+// Application Insights (linked to Log Analytics workspace)
 resource appInsights 'Microsoft.Insights/components@2020-02-02' = {
   name: appInsightsName
   location: location
@@ -149,19 +162,21 @@ resource appInsights 'Microsoft.Insights/components@2020-02-02' = {
   properties: {
     Application_Type: 'web'
     Request_Source: 'rest'
+    WorkspaceResourceId: logAnalytics.id
   }
 }
 
-// App Service Plan (Consumption)
+// App Service Plan (Elastic Premium - supports remote build)
 resource appServicePlan 'Microsoft.Web/serverfarms@2023-01-01' = {
   name: appServicePlanName
   location: location
   sku: {
-    name: 'Y1'
-    tier: 'Dynamic'
+    name: 'EP1'
+    tier: 'ElasticPremium'
   }
   properties: {
     reserved: true // Linux
+    maximumElasticWorkerCount: 20
   }
 }
 
@@ -206,9 +221,10 @@ resource functionApp 'Microsoft.Web/sites@2023-01-01' = {
   }
   properties: {
     serverFarmId: appServicePlan.id
+    publicNetworkAccess: 'Enabled'
     siteConfig: {
-      pythonVersion: '3.11'
-      linuxFxVersion: 'Python|3.11'
+      pythonVersion: '3.12'
+      linuxFxVersion: 'Python|3.12'
       appSettings: [
         {
           name: 'AzureWebJobsStorage'
@@ -221,6 +237,14 @@ resource functionApp 'Microsoft.Web/sites@2023-01-01' = {
         {
           name: 'FUNCTIONS_EXTENSION_VERSION'
           value: '~4'
+        }
+        {
+          name: 'ENABLE_ORYX_BUILD'
+          value: 'true'
+        }
+        {
+          name: 'SCM_DO_BUILD_DURING_DEPLOYMENT'
+          value: 'true'
         }
         {
           name: 'APPINSIGHTS_INSTRUMENTATIONKEY'

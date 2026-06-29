@@ -99,14 +99,15 @@ resource "azurerm_application_insights" "main" {
 }
 
 # =============================================================================
-# App Service Plan (Consumption)
+# App Service Plan (Elastic Premium - supports remote build)
 # =============================================================================
 resource "azurerm_service_plan" "main" {
-  name                = local.app_service_plan_name
-  resource_group_name = data.azurerm_resource_group.main.name
-  location            = var.location
-  os_type             = "Linux"
-  sku_name            = "Y1"
+  name                         = local.app_service_plan_name
+  resource_group_name          = data.azurerm_resource_group.main.name
+  location                     = var.location
+  os_type                      = "Linux"
+  sku_name                     = "EP1"
+  maximum_elastic_worker_count = 20
 
   tags = var.tags
 }
@@ -151,6 +152,7 @@ resource "azurerm_linux_function_app" "main" {
   storage_account_name       = azurerm_storage_account.main.name
   storage_account_access_key = azurerm_storage_account.main.primary_access_key
   service_plan_id            = azurerm_service_plan.main.id
+  public_network_access_enabled = true
 
   identity {
     type = "SystemAssigned"
@@ -158,7 +160,7 @@ resource "azurerm_linux_function_app" "main" {
 
   site_config {
     application_stack {
-      python_version = "3.11"
+      python_version = "3.12"
     }
 
     cors {
@@ -169,6 +171,8 @@ resource "azurerm_linux_function_app" "main" {
   app_settings = {
     FUNCTIONS_WORKER_RUNTIME              = "python"
     FUNCTIONS_EXTENSION_VERSION           = "~4"
+    ENABLE_ORYX_BUILD                     = "true"
+    SCM_DO_BUILD_DURING_DEPLOYMENT        = "true"
     APPINSIGHTS_INSTRUMENTATIONKEY        = azurerm_application_insights.main.instrumentation_key
     APPLICATIONINSIGHTS_CONNECTION_STRING = azurerm_application_insights.main.connection_string
     AZURE_OPENAI_ENDPOINT                 = azurerm_cognitive_account.openai.endpoint

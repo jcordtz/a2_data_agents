@@ -45,6 +45,7 @@
 #   --mcp-url <url>         MCP server URL (for registration/chatbot)
 #   --mcp-token <token>     MCP server auth token
 #
+#   --yes, -y               Auto-confirm all prompts
 #   --dry-run               Show what would be done without executing
 #   --help                  Show this help message
 #
@@ -83,6 +84,7 @@ LOCATION="eastus"
 MCP_URL=""
 MCP_TOKEN=""
 DRY_RUN=false
+AUTO_YES=false
 
 # Steps to run (default: none, will run all if none specified)
 RUN_GENERATE=false
@@ -133,6 +135,7 @@ usage() {
     echo "  --mcp-token <token>     MCP server auth token"
     echo ""
     echo "Other:"
+    echo "  --yes, -y               Auto-confirm all prompts"
     echo "  --dry-run               Show what would be done without executing"
     echo "  --help                  Show this help message"
     echo ""
@@ -202,6 +205,10 @@ while [[ $# -gt 0 ]]; do
             DRY_RUN=true
             shift
             ;;
+        --yes|-y)
+            AUTO_YES=true
+            shift
+            ;;
         --help|-h)
             usage
             ;;
@@ -237,6 +244,18 @@ if [ "$RUN_DEPLOY" = true ] || [ "$RUN_MCP" = true ] || [ "$RUN_CHATBOT" = true 
     fi
 fi
 
+# Check prerequisites for chatbot deployment
+if [ "$RUN_CHATBOT" = true ]; then
+    if ! command -v npm &> /dev/null; then
+        print_error "npm is required for chatbot deployment but not found"
+        print_info "Install Node.js 18+ which includes npm:"
+        print_info "  macOS:   brew install node"
+        print_info "  Linux:   curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash - && sudo apt-get install -y nodejs"
+        print_info "  Windows: Download from https://nodejs.org/"
+        exit 1
+    fi
+fi
+
 if [ "$RUN_REGISTER" = true ] || [ "$RUN_CHATBOT" = true ]; then
     if [ -z "$MCP_URL" ] && [ "$RUN_MCP" = false ]; then
         print_warning "MCP URL not specified. Will use localhost or deploy first."
@@ -254,6 +273,7 @@ echo "  Resource Group: ${RESOURCE_GROUP:-"(not set)"}"
 echo "  Location:       $LOCATION"
 echo "  MCP URL:        ${MCP_URL:-"(will be determined after MCP deployment)"}"
 echo "  Dry Run:        $DRY_RUN"
+echo "  Auto-confirm:   $AUTO_YES"
 echo ""
 print_info "Steps to run:"
 [ "$RUN_GENERATE" = true ] && echo "  [1] Generate agents from CSV"
@@ -268,11 +288,15 @@ if [ "$DRY_RUN" = true ]; then
     echo ""
 fi
 
-# Confirm before proceeding
-read -p "Continue? (yes/no): " CONFIRM
-if [ "$CONFIRM" != "yes" ]; then
-    print_info "Aborted by user."
-    exit 0
+# Confirm before proceeding (skip if --yes flag is set)
+if [ "$AUTO_YES" = true ]; then
+    print_info "Auto-confirming (--yes flag set)"
+else
+    read -p "Continue? (yes/no): " CONFIRM
+    if [ "$CONFIRM" != "yes" ]; then
+        print_info "Aborted by user."
+        exit 0
+    fi
 fi
 
 # Track deployed MCP URL for later steps
@@ -381,17 +405,28 @@ if [ "$RUN_MCP" = true ]; then
             MCP_DEPLOY_ARGS="$MCP_DEPLOY_ARGS --auth-token $MCP_TOKEN"
         fi
         
-        # Capture the MCP URL from deployment output
+        # Capture the MCP URL and auth token from deployment output
         MCP_OUTPUT=$(bash "$SCRIPT_DIR/mcp/deploy.sh" $MCP_DEPLOY_ARGS 2>&1 | tee /dev/tty)
         
-        # Try to extract MCP URL from output
-        DEPLOYED_MCP_URL=$(echo "$MCP_OUTPUT" | grep -oE 'https?://[^ ]+' | tail -1)
+        # Extract structured output between markers
+        if echo "$MCP_OUTPUT" | grep -q "MCP_DEPLOYMENT_OUTPUT_START"; then
+            DEPLOYED_MCP_URL=$(echo "$MCP_OUTPUT" | sed -n '/MCP_DEPLOYMENT_OUTPUT_START/,/MCP_DEPLOYMENT_OUTPUT_END/p' | grep "MCP_URL=" | cut -d'=' -f2-)
+            DEPLOYED_MCP_TOKEN=$(echo "$MCP_OUTPUT" | sed -n '/MCP_DEPLOYMENT_OUTPUT_START/,/MCP_DEPLOYMENT_OUTPUT_END/p' | grep "MCP_AUTH_TOKEN=" | cut -d'=' -f2-)
+        else
+            # Fallback: try to extract MCP URL from output
+            DEPLOYED_MCP_URL=$(echo "$MCP_OUTPUT" | grep -oE 'https?://[^ ]+' | tail -1)
+        fi
         
         if [ -n "$DEPLOYED_MCP_URL" ]; then
             print_success "MCP server deployed at: $DEPLOYED_MCP_URL"
             # Use deployed URL for subsequent steps if not explicitly provided
             if [ -z "$MCP_URL" ]; then
                 MCP_URL="$DEPLOYED_MCP_URL"
+            fi
+            # Use deployed token if not explicitly provided
+            if [ -z "$MCP_TOKEN" ] && [ -n "$DEPLOYED_MCP_TOKEN" ]; then
+                MCP_TOKEN="$DEPLOYED_MCP_TOKEN"
+                print_info "Using generated auth token for subsequent steps"
             fi
         else
             print_success "MCP server deployment complete"
@@ -478,6 +513,10 @@ echo ""
 
 if [ -n "$MCP_URL" ] || [ -n "$DEPLOYED_MCP_URL" ]; then
     print_info "MCP Server URL: ${MCP_URL:-$DEPLOYED_MCP_URL}"
+fi
+
+if [ -n "$MCP_TOKEN" ]; then
+    print_info "MCP Auth Token: $MCP_TOKEN"
 fi
 
 print_success "All requested steps completed successfully!"

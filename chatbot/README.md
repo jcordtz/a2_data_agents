@@ -22,6 +22,8 @@ A React-based chatbot UI that connects to the MCP Server, enabling natural langu
 
 ## Architecture
 
+The chatbot is a static React application that calls the MCP server directly (no backend API layer needed).
+
 ```
 ┌─────────────────────────────────────────────────────────────────┐
 │                         User Browser                             │
@@ -32,22 +34,15 @@ A React-based chatbot UI that connects to the MCP Server, enabling natural langu
 │  │  └──────────────┘  └──────────────┘  └──────────────┘   │    │
 │  └─────────────────────────────────────────────────────────┘    │
 └─────────────────────────────────┬───────────────────────────────┘
-                                  │ HTTPS
-                                  ▼
-┌─────────────────────────────────────────────────────────────────┐
-│              Azure Static Web Apps (API Functions)               │
-│  ┌─────────────────────────────────────────────────────────┐    │
-│  │                   API Proxy Functions                    │    │
-│  │  /api/query  │  /api/agents  │  /api/health             │    │
-│  └─────────────────────────────────────────────────────────┘    │
-└─────────────────────────────────┬───────────────────────────────┘
-                                  │ HTTPS
+                                  │ HTTPS (direct call)
                                   ▼
 ┌─────────────────────────────────────────────────────────────────┐
 │                          MCP Server                              │
-│          (Azure Container Apps / Azure Functions)                │
+│             (Azure Container Apps with CORS enabled)             │
 └─────────────────────────────────────────────────────────────────┘
 ```
+
+**Note:** The MCP server URL and auth token are baked into the frontend at build time via environment variables (`VITE_MCP_SERVER_URL` and `VITE_MCP_AUTH_TOKEN`).
 
 ---
 
@@ -119,10 +114,11 @@ The app will be available at `http://localhost:5173`
 
 ### Configuration
 
-Create a `.env` file:
+Create a `.env` file for local development:
 
 ```env
 VITE_MCP_SERVER_URL=http://localhost:8080
+VITE_MCP_AUTH_TOKEN=your-auth-token
 VITE_APP_TITLE=Data Agent Chat
 ```
 
@@ -132,48 +128,60 @@ VITE_APP_TITLE=Data Agent Chat
 
 ### Deploy to Azure Static Web Apps
 
+The chatbot deploys as a pure static site. The MCP server URL and auth token are baked in at build time.
+
 ```bash
 # Login to Azure
 az login
 
-# Deploy infrastructure
-az deployment group create \
-  -g your-resource-group \
-  -f infra/main.bicep \
-  --parameters @infra/main.parameters.json
+# Use the deployment script (recommended)
+./deploy.sh \
+  --resource-group your-rg \
+  --mcp-url https://your-mcp-server.azurecontainerapps.io \
+  --mcp-token YOUR_MCP_AUTH_TOKEN \
+  --location eastus
 
-# Or use the deployment script
-./deploy.sh --resource-group your-rg --location eastus
+# Or deploy via the master script
+cd ..
+./run.sh --chatbot \
+  --resource-group your-rg \
+  --mcp-url https://your-mcp-server.azurecontainerapps.io \
+  --mcp-token YOUR_MCP_AUTH_TOKEN
 ```
 
-### Environment Variables (Production)
-
-Set these in Azure Static Web Apps configuration:
-
-| Variable | Description |
-|----------|-------------|
-| `MCP_SERVER_URL` | URL of the MCP Server |
-| `MCP_AUTH_TOKEN` | Optional authentication token |
+**Note:** The MCP server URL and token are embedded in the JavaScript bundle at build time. There's no backend API layer - the React app calls the MCP server directly via HTTPS.
 
 ---
 
-## API Endpoints
+## MCP Server Endpoints
 
-The Azure Functions API provides these endpoints:
+The chatbot calls the MCP server directly. These are the MCP endpoints used:
 
 | Endpoint | Method | Description |
 |----------|--------|-------------|
-| `/api/query` | POST | Send a query to an agent |
-| `/api/agents` | GET | List available agents |
-| `/api/health` | GET | Health check |
+| `/mcp/v1/tools/call` | POST | Execute MCP tool (query_table, list_agents) |
+| `/health` | GET | Health check |
 
-### Query Request
+### Query Request (via MCP)
 
 ```json
-POST /api/query
+POST /mcp/v1/tools/call
 {
-  "agentId": "hr_employees",
-  "question": "Show me the top 5 employees by salary"
+  "name": "query_table",
+  "arguments": {
+    "agent_id": "hr_employees",
+    "question": "Show me the top 5 employees by salary"
+  }
+}
+```
+
+### List Agents Request
+
+```json
+POST /mcp/v1/tools/call
+{
+  "name": "list_agents",
+  "arguments": {}
 }
 ```
 
@@ -181,8 +189,7 @@ POST /api/query
 
 ```json
 {
-  "success": true,
-  "data": {
+  "content": {
     "answer": "Here are the top 5 employees...",
     "sql": "SELECT * FROM employees ORDER BY salary DESC LIMIT 5",
     "results": [...]

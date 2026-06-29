@@ -182,10 +182,29 @@ class AgentRegistry:
     def __init__(self, registry_path: str = "agents.json"):
         self.registry_path = Path(registry_path)
         self.agents: Dict[str, AgentInfo] = {}
+        self._storage_available = True
+        self._ensure_storage()
         self._load_registry()
+    
+    def _ensure_storage(self) -> None:
+        """Ensure storage directory exists and is writable."""
+        try:
+            self.registry_path.parent.mkdir(parents=True, exist_ok=True)
+            # Test write access
+            test_file = self.registry_path.parent / ".write_test"
+            test_file.touch()
+            test_file.unlink()
+            logger.info(f"Storage directory ready: {self.registry_path.parent}")
+        except Exception as e:
+            logger.warning(f"Storage not available, running in memory-only mode: {e}")
+            self._storage_available = False
     
     def _load_registry(self) -> None:
         """Load agents from the registry file."""
+        if not self._storage_available:
+            logger.info("Running in memory-only mode, no agents loaded")
+            return
+            
         if self.registry_path.exists():
             try:
                 with open(self.registry_path, "r") as f:
@@ -195,9 +214,15 @@ class AgentRegistry:
                 logger.info(f"Loaded {len(self.agents)} agents from registry")
             except Exception as e:
                 logger.error(f"Error loading registry: {e}")
+        else:
+            logger.info(f"Registry file not found at {self.registry_path}, starting with empty registry")
     
     def _save_registry(self) -> None:
         """Save agents to the registry file."""
+        if not self._storage_available:
+            logger.debug("Storage not available, skipping save")
+            return
+            
         try:
             data = {agent_id: asdict(agent) for agent_id, agent in self.agents.items()}
             with open(self.registry_path, "w") as f:
@@ -264,7 +289,8 @@ registry = AgentRegistry(registry_path)
 async def verify_auth(authorization: Optional[str] = Header(None)) -> bool:
     """Verify authentication token if configured."""
     auth_token = os.environ.get("MCP_AUTH_TOKEN")
-    if auth_token:
+    # Skip auth if token is not configured or is the placeholder value
+    if auth_token and auth_token != "not-configured":
         if not authorization or authorization != f"Bearer {auth_token}":
             raise HTTPException(status_code=401, detail="Unauthorized")
     return True

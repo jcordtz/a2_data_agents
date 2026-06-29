@@ -182,7 +182,8 @@ a2_data_agents/
 
 ### Prerequisites
 
-- Python 3.11+
+- Python 3.12+
+- Node.js 18+ and npm (for chatbot deployment)
 - Azure CLI
 - Azure subscription with:
   - Azure OpenAI access
@@ -361,7 +362,13 @@ python agents/agent_generator.py \
 
 # Generate multiple agents from CSV
 # CSV format: database_type,host,port,service_name,schema,table_name,purview
-./generate_agents.sh sample_tables.csv --output ./generated_agents
+./generate_agents.sh --csv sample_tables.csv --output ./generated_agents
+
+# Parameters can be in any order
+./generate_agents.sh --output ./generated_agents --csv sample_tables.csv --yes
+
+# Auto-confirm all prompts (useful for CI/CD)
+./generate_agents.sh -c sample_tables.csv -o ./generated_agents -y
 ```
 
 ### Master Orchestration Script
@@ -383,6 +390,9 @@ The `run.sh` script orchestrates all solution components in the correct order:
 
 # Preview without executing (dry run)
 ./run.sh --all --resource-group my-rg --dry-run
+
+# Auto-confirm all prompts (useful for CI/CD)
+./run.sh --all --csv tables.csv --resource-group my-rg --yes
 ```
 
 **Available steps:**
@@ -392,6 +402,10 @@ The `run.sh` script orchestrates all solution components in the correct order:
 - `--register` - Register agents with MCP server
 - `--chatbot` - Deploy chatbot to Azure Static Web Apps
 - `--all` - Run all steps in order
+
+**Additional options:**
+- `--yes`, `-y` - Auto-confirm all prompts (skip interactive confirmations)
+- `--dry-run` - Preview what would be done without executing
 
 ### MCP Server Operations
 
@@ -410,9 +424,15 @@ python mcp_server.py
 # Batch register all generated agents
 ./register_all_agents.sh --agents-dir ../generated_agents
 
-# Deploy MCP server to Azure
+# Deploy MCP server to Azure (auto-generates auth token)
 ./deploy.sh --resource-group mcp-rg --location eastus
+# Output includes: MCP_URL and MCP_AUTH_TOKEN
+
+# Or provide your own auth token
+./deploy.sh --resource-group mcp-rg --location eastus --auth-token YOUR_SECRET_TOKEN
 ```
+
+**Note:** The MCP server deployment automatically generates a secure authentication token if one is not provided. The token is displayed at the end of deployment and should be saved for use with the chatbot and agent registration.
 
 ### MCP Tool Usage (for AI Models)
 
@@ -440,7 +460,7 @@ POST /mcp/v1/tools/call
 
 ### Chatbot Interface
 
-The chatbot provides a web-based UI for interacting with the MCP server.
+The chatbot provides a web-based UI for interacting with the MCP server. It's deployed as a static site that calls the MCP server directly (no backend API layer needed).
 
 ```bash
 cd chatbot
@@ -457,9 +477,12 @@ npm run build
 # Deploy to Azure Static Web Apps
 ./deploy.sh \
   --resource-group chat-rg \
-  --mcp-url https://your-mcp-server.azurecontainer.io \
+  --mcp-url https://your-mcp-server.azurecontainerapps.io \
+  --mcp-token YOUR_MCP_AUTH_TOKEN \
   --location eastus2
 ```
+
+**Note:** The MCP server URL and auth token are baked into the frontend at build time. CORS is enabled on the MCP server to allow browser requests.
 
 Or deploy as part of the main infrastructure:
 
@@ -555,7 +578,9 @@ client_secret = your-client-secret     # Service principal client secret (requir
 |----------|-------------|---------|
 | `MCP_SERVER_PORT` | Server port | `8080` |
 | `MCP_REGISTRY_PATH` | Path to agent registry JSON | `./agents.json` |
-| `MCP_AUTH_TOKEN` | Optional authentication token | (none) |
+| `MCP_AUTH_TOKEN` | Authentication token (auto-generated during deployment if not provided) | (auto-generated) |
+
+**Note:** When deployed to Azure Container Apps, if no auth token is provided, a secure 32-character token is automatically generated and displayed in the deployment output. The value `not-configured` is treated as "no authentication required".
 
 ---
 
@@ -623,13 +648,16 @@ cd mcp && python mcp_server.py
 ### Azure Resources Created
 
 **Main Agent (via Bicep or Terraform):**
-- Azure Function App (Python 3.11)
+- Azure Function App (Python 3.12)
 - Azure OpenAI Service with GPT-4o
-- App Service Plan (Consumption)
+- App Service Plan (Elastic Premium EP1 - supports remote build)
 - Storage Account
 - Application Insights
+- Log Analytics Workspace
 - Key Vault (for database credentials)
 - Optional: Static Web App (for chatbot)
+
+**Note:** The Elastic Premium plan is used instead of Consumption to support remote build deployment, which eliminates the need for local Python dependencies during deployment.
 
 **MCP Server (`mcp/infra/main.bicep`):**
 - Azure Container Apps
@@ -671,12 +699,21 @@ terraform apply
 ### Deploy MCP Server
 
 ```bash
-# Deploy MCP server infrastructure (Bicep)
+# Deploy MCP server using the deploy script (recommended)
+# This builds the container, deploys to Azure Container Apps, and auto-generates an auth token
+./mcp/deploy.sh --resource-group mcp-resource-group --location eastus
+
+# Or use the master script
+./run.sh --mcp --resource-group mcp-resource-group --location eastus
+
+# Or deploy infrastructure directly via Bicep (requires manual container build)
 az deployment group create \
   -g mcp-resource-group \
   -f mcp/infra/main.bicep \
-  --parameters @mcp/infra/main.parameters.json
+  --parameters baseName=mcp-data-agents authToken=YOUR_SECRET_TOKEN
 ```
+
+**Note:** Redeployments automatically clean up existing Container Apps and storage mounts to avoid Azure update conflicts.
 
 ---
 
@@ -722,6 +759,9 @@ az deployment group create \
 1. **Agent not found**: Verify agent is registered with `GET /api/agents`
 2. **Connection refused**: Check agent endpoint is accessible from MCP server
 3. **Authentication failed**: Verify API key is correct
+4. **Container App "Deployment Progress Deadline Exceeded"**: The deploy script now automatically cleans up existing resources before redeployment. If issues persist, manually delete the Container App in Azure portal and redeploy.
+5. **CORS errors from chatbot**: Ensure the chatbot is accessing the MCP server over HTTPS. The MCP server has CORS enabled for all origins.
+6. **Auth token error "value or keyVaultUrl and identity should be provided"**: This is fixed - the MCP server now uses a placeholder value when no auth token is configured.
 
 ---
 
@@ -738,9 +778,9 @@ Please ensure all code includes appropriate documentation headers.
 
 ### 1. Prerequisites
 
-- Python 3.11+
+- Python 3.12+
+- Node.js 18+ and npm (for chatbot deployment)
 - Azure CLI
-- Azure Functions Core Tools
 - Database access (Oracle, SQL Server, PostgreSQL, or IBM DB2)
 
 ### 2. Install Dependencies
@@ -772,10 +812,15 @@ export AZURE_OPENAI_DEPLOYMENT=gpt-4o
 
 ```bash
 # Use the master script to run all components
-./run.sh --all --csv sample_tables.csv --resource-group my-rg
+./run.sh --all --csv sample_tables.csv --resource-group my-rg --location eastus
 
 # Or run individual steps
 ./run.sh --generate --csv sample_tables.csv  # Generate agents only
+./run.sh --mcp --resource-group my-rg          # Deploy MCP server only
+./run.sh --chatbot --mcp-url https://... --resource-group my-rg  # Deploy chatbot only
+
+# The MCP deployment outputs the URL and auto-generated auth token
+# These are automatically used by subsequent steps
 ```
 
 ## Generating Table-Specific Agents
@@ -793,7 +838,7 @@ db2,db2host.example.com,50000,DWDB,ANALYTICS,REPORTS,no
 EOF
 
 # Generate agents (connections looked up from security/ XML files)
-./generate_agents.sh tables.csv --output ./generated_agents
+./generate_agents.sh --csv tables.csv --output ./generated_agents
 
 # Deploy using the master script
 ./run.sh --deploy --resource-group mygroup --output ./generated_agents
@@ -801,9 +846,17 @@ EOF
 # Or run all steps at once
 ./run.sh --all --csv tables.csv --resource-group mygroup
 
-# Note: If the output directory exists and is not empty, you will be
-# prompted to confirm before continuing.
+# Auto-confirm all prompts (skips confirmation for non-empty directories, etc.)
+./generate_agents.sh --csv tables.csv --output ./generated_agents --yes
+./run.sh --all --csv tables.csv --resource-group mygroup --yes
 ```
+
+**Note:** If the output directory exists and is not empty, you will be prompted with options to:
+1. Empty the directory and continue
+2. Continue without emptying (may overwrite existing files)
+3. Abort
+
+Use `--yes` to automatically empty the directory and continue.
 
 ## API Endpoints
 

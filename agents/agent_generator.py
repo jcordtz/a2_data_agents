@@ -760,79 +760,42 @@ while [[ $# -gt 0 ]]; do
     esac
 done
 
-# Detect OS and find Azure Functions Core Tools
-find_func_command() {{
-    # Check if func is already in PATH
-    if command -v func &> /dev/null; then
-        echo "func"
-        return 0
-    fi
-    
-    # Detect OS
-    OS_TYPE="$(uname -s)"
-    
-    case "$OS_TYPE" in
-        Darwin)
-            # macOS - check Homebrew locations
-            if [ -x "/opt/homebrew/bin/func" ]; then
-                echo "/opt/homebrew/bin/func"
-                return 0
-            elif [ -x "/usr/local/bin/func" ]; then
-                echo "/usr/local/bin/func"
-                return 0
-            fi
-            # Try to find via Homebrew
-            if command -v brew &> /dev/null; then
-                BREW_PREFIX=$(brew --prefix 2>/dev/null)
-                if [ -x "$BREW_PREFIX/bin/func" ]; then
-                    echo "$BREW_PREFIX/bin/func"
-                    return 0
-                fi
-            fi
-            ;;
-        Linux)
-            # Linux - check common locations
-            if [ -x "/usr/bin/func" ]; then
-                echo "/usr/bin/func"
-                return 0
-            elif [ -x "$HOME/.azure-functions-core-tools/func" ]; then
-                echo "$HOME/.azure-functions-core-tools/func"
-                return 0
-            fi
-            ;;
-        MINGW*|MSYS*|CYGWIN*)
-            # Windows Git Bash / WSL
-            if [ -x "/c/Program Files/Microsoft/Azure Functions Core Tools/func.exe" ]; then
-                echo "/c/Program Files/Microsoft/Azure Functions Core Tools/func.exe"
-                return 0
-            fi
-            ;;
-    esac
-    
-    # Not found
-    return 1
-}}
-
-FUNC_CMD=$(find_func_command)
-if [ -z "$FUNC_CMD" ]; then
-    echo "ERROR: Azure Functions Core Tools (func) not found."
+# Verify Azure CLI is available
+if ! command -v az &> /dev/null; then
+    echo "ERROR: Azure CLI (az) not found."
     echo ""
     echo "Please install it:"
-    echo "  macOS:   brew tap azure/functions && brew install azure-functions-core-tools@4"
-    echo "  Linux:   See https://learn.microsoft.com/en-us/azure/azure-functions/functions-run-local"
-    echo "  Windows: npm install -g azure-functions-core-tools@4"
+    echo "  macOS:   brew install azure-cli"
+    echo "  Linux:   curl -sL https://aka.ms/InstallAzureCLIDeb | sudo bash"
+    echo "  Windows: winget install Microsoft.AzureCLI"
     exit 1
 fi
 
 echo "Deploying {agent_name} agent..."
 echo "Resource Group: $RESOURCE_GROUP"
 echo "Location: $LOCATION"
-echo "Using func command: $FUNC_CMD"
 
 # Create resource group
 az group create --name "$RESOURCE_GROUP" --location "$LOCATION" --output none
 
-# Deploy infrastructure
+# Clean up existing Function App if it exists (allows clean redeployment)
+# Get the expected function app name pattern
+SANITIZED_NAME=$(echo "{agent_name}" | tr '.' '-' | tr '_' '-')
+EXISTING_FUNC=$(az functionapp list \\
+    --resource-group "$RESOURCE_GROUP" \\
+    --query "[?starts_with(name, '$SANITIZED_NAME')].name" \\
+    --output tsv 2>/dev/null || true)
+
+if [ -n "$EXISTING_FUNC" ]; then
+    echo "Found existing Function App: $EXISTING_FUNC"
+    echo "Deleting existing Function App for clean redeployment..."
+    az functionapp delete \\
+        --name "$EXISTING_FUNC" \\
+        --resource-group "$RESOURCE_GROUP" \\
+        --output none 2>/dev/null || true
+fi
+
+# Deploy infrastructure (Elastic Premium plan for remote build support)
 DEPLOYMENT_OUTPUT=$(az deployment group create \\
     --resource-group "$RESOURCE_GROUP" \\
     --template-file infra/main.bicep \\
@@ -842,8 +805,23 @@ DEPLOYMENT_OUTPUT=$(az deployment group create \\
 
 FUNCTION_APP_NAME=$(echo "$DEPLOYMENT_OUTPUT" | jq -r '.functionAppName.value')
 
-echo "Deploying function code to $FUNCTION_APP_NAME..."
-"$FUNC_CMD" azure functionapp publish "$FUNCTION_APP_NAME" --python
+echo "Deploying function code to $FUNCTION_APP_NAME (remote build)..."
+
+# Create deployment package (source code only - dependencies built in Azure)
+DEPLOY_ZIP="deploy_package.zip"
+rm -f "$DEPLOY_ZIP"
+zip -r "$DEPLOY_ZIP" . -x "*.git*" -x "*__pycache__*" -x "*.pyc" -x "infra/*" -x "deploy.sh" -x "*.zip" -x ".venv/*" -x "venv/*" -x ".python_packages/*"
+
+# Deploy with remote build (Elastic Premium plan supports this)
+az functionapp deployment source config-zip \\
+    --name "$FUNCTION_APP_NAME" \\
+    --resource-group "$RESOURCE_GROUP" \\
+    --src "$DEPLOY_ZIP" \\
+    --build-remote true \\
+    --timeout 600
+
+# Cleanup
+rm -f "$DEPLOY_ZIP"
 
 echo "Deployment complete!"
 echo "Function App: $FUNCTION_APP_NAME"
@@ -882,6 +860,7 @@ var sanitizedBaseName = toLower(replace(replace(replace(baseName, '_', ''), '-',
 var storageAccountName = take('${{take(sanitizedBaseName, 10)}}st${{uniqueString(resourceGroup().id)}}', 24)
 var appServicePlanName = '${{sanitizedResourceName}}-plan'
 var appInsightsName = '${{sanitizedResourceName}}-insights'
+var logAnalyticsName = '${{sanitizedResourceName}}-logs'
 
 resource storageAccount 'Microsoft.Storage/storageAccounts@2023-01-01' = {{
   name: storageAccountName
@@ -890,18 +869,29 @@ resource storageAccount 'Microsoft.Storage/storageAccounts@2023-01-01' = {{
   kind: 'StorageV2'
 }}
 
+// Log Analytics Workspace (in the same resource group)
+resource logAnalytics 'Microsoft.OperationalInsights/workspaces@2022-10-01' = {{
+  name: logAnalyticsName
+  location: location
+  properties: {{
+    sku: {{ name: 'PerGB2018' }}
+    retentionInDays: 30
+  }}
+}}
+
+// Application Insights (linked to Log Analytics workspace)
 resource appInsights 'Microsoft.Insights/components@2020-02-02' = {{
   name: appInsightsName
   location: location
   kind: 'web'
-  properties: {{ Application_Type: 'web' }}
+  properties: {{ Application_Type: 'web', WorkspaceResourceId: logAnalytics.id }}
 }}
 
 resource appServicePlan 'Microsoft.Web/serverfarms@2023-01-01' = {{
   name: appServicePlanName
   location: location
-  sku: {{ name: 'Y1', tier: 'Dynamic' }}
-  properties: {{ reserved: true }}
+  sku: {{ name: 'EP1', tier: 'ElasticPremium' }}
+  properties: {{ reserved: true, maximumElasticWorkerCount: 20 }}
 }}
 
 resource functionApp 'Microsoft.Web/sites@2023-01-01' = {{
@@ -910,12 +900,16 @@ resource functionApp 'Microsoft.Web/sites@2023-01-01' = {{
   kind: 'functionapp,linux'
   properties: {{
     serverFarmId: appServicePlan.id
+    publicNetworkAccess: 'Enabled'
     siteConfig: {{
-      pythonVersion: '3.11'
+      pythonVersion: '3.12'
+      linuxFxVersion: 'Python|3.12'
       appSettings: [
         {{ name: 'AzureWebJobsStorage', value: 'DefaultEndpointsProtocol=https;AccountName=${{storageAccount.name}};EndpointSuffix=${{environment().suffixes.storage}};AccountKey=${{storageAccount.listKeys().keys[0].value}}' }}
         {{ name: 'FUNCTIONS_WORKER_RUNTIME', value: 'python' }}
         {{ name: 'FUNCTIONS_EXTENSION_VERSION', value: '~4' }}
+        {{ name: 'ENABLE_ORYX_BUILD', value: 'true' }}
+        {{ name: 'SCM_DO_BUILD_DURING_DEPLOYMENT', value: 'true' }}
         {{ name: 'APPINSIGHTS_INSTRUMENTATIONKEY', value: appInsights.properties.InstrumentationKey }}
         {{ name: 'ORACLE_HOST', value: oracleHost }}
         {{ name: 'ORACLE_PORT', value: oraclePort }}

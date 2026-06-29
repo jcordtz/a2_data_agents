@@ -21,7 +21,7 @@
 # =============================================================================
 #
 # USAGE:
-#   ./generate_agents.sh <csv_file> [options]
+#   ./generate_agents.sh --csv <csv_file> [options]
 #
 # CSV FORMAT:
 #   database_type,host,port,service_name,schema,table_name,purview
@@ -29,11 +29,14 @@
 #   mssql,sql.example.com,1433,mydb,SALES,ORDERS,no
 #
 # OPTIONS:
-#   --output <dir>       Output directory for generated agents (default: ./generated_agents)
+#   --csv, -c <file>     CSV file with table definitions (required)
+#   --output, -o <dir>   Output directory for generated agents (default: ./generated_agents)
+#   --yes, -y            Auto-confirm all prompts
 #
 # EXAMPLES:
-#   ./generate_agents.sh tables.csv
-#   ./generate_agents.sh tables.csv --output ./my_agents
+#   ./generate_agents.sh --csv tables.csv
+#   ./generate_agents.sh --output ./my_agents --csv tables.csv --yes
+#   ./generate_agents.sh -c tables.csv -o ./my_agents -y
 # =============================================================================
 
 set -e
@@ -47,14 +50,17 @@ NC='\033[0m' # No Color
 
 # Default configuration
 OUTPUT_DIR="./generated_agents"
+AUTO_YES=false
 
 # Print usage
 usage() {
-    echo "Usage: $0 <csv_file> [options]"
+    echo "Usage: $0 --csv <csv_file> [options]"
     echo ""
     echo "Options:"
-    echo "  --output <dir>         Output directory for generated agents (default: ./generated_agents)"
-    echo "  --help                 Show this help message"
+    echo "  --csv, -c <file>       CSV file with table definitions (required)"
+    echo "  --output, -o <dir>     Output directory for generated agents (default: ./generated_agents)"
+    echo "  --yes, -y              Auto-confirm all prompts"
+    echo "  --help, -h             Show this help message"
     echo ""
     echo "Note: Database connections are looked up from security/ XML files based on hostname."
     echo "      Use deploy_agents.sh to deploy generated agents to Azure."
@@ -68,20 +74,23 @@ print_warning() { echo -e "${YELLOW}[WARNING]${NC} $1"; }
 print_error() { echo -e "${RED}[ERROR]${NC} $1"; }
 
 # Parse arguments
-if [ $# -lt 1 ]; then
-    usage
-fi
-
-CSV_FILE="$1"
-shift
+CSV_FILE=""
 
 while [[ $# -gt 0 ]]; do
     case $1 in
-        --output)
+        --csv|-c)
+            CSV_FILE="$2"
+            shift 2
+            ;;
+        --output|-o)
             OUTPUT_DIR="$2"
             shift 2
             ;;
-        --help)
+        --yes|-y)
+            AUTO_YES=true
+            shift
+            ;;
+        --help|-h)
             usage
             ;;
         *)
@@ -92,6 +101,11 @@ while [[ $# -gt 0 ]]; do
 done
 
 # Validate inputs
+if [ -z "$CSV_FILE" ]; then
+    print_error "CSV file is required. Use --csv <file>"
+    usage
+fi
+
 if [ ! -f "$CSV_FILE" ]; then
     print_error "CSV file not found: $CSV_FILE"
     exit 1
@@ -111,10 +125,28 @@ else
     # Check if output directory is not empty
     if [ -n "$(ls -A "$OUTPUT_DIR" 2>/dev/null)" ]; then
         print_warning "Output directory '$OUTPUT_DIR' is not empty."
-        read -p "Do you want to continue? This may overwrite existing agents. (yes/no): " CONFIRM
-        if [ "$CONFIRM" != "yes" ]; then
-            print_info "Aborted by user."
-            exit 0
+        if [ "$AUTO_YES" = true ]; then
+            print_info "Auto-confirming: emptying output directory (--yes flag set)"
+            rm -rf "${OUTPUT_DIR:?}"/*
+        else
+            echo "Options:"
+            echo "  1) Empty the directory and continue"
+            echo "  2) Continue without emptying (may overwrite)"
+            echo "  3) Abort"
+            read -p "Choose an option (1/2/3): " CHOICE
+            case "$CHOICE" in
+                1)
+                    print_info "Emptying output directory..."
+                    rm -rf "${OUTPUT_DIR:?}"/*
+                    ;;
+                2)
+                    print_info "Continuing without emptying..."
+                    ;;
+                *)
+                    print_info "Aborted by user."
+                    exit 0
+                    ;;
+            esac
         fi
     fi
 fi

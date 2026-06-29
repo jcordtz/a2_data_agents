@@ -94,6 +94,16 @@ if ! command -v az &> /dev/null; then
     exit 1
 fi
 
+# Check if npm is installed
+if ! command -v npm &> /dev/null; then
+    echo "Error: npm is not installed"
+    echo "Please install Node.js 18+ which includes npm:"
+    echo "  macOS:   brew install node"
+    echo "  Linux:   curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash - && sudo apt-get install -y nodejs"
+    echo "  Windows: Download from https://nodejs.org/"
+    exit 1
+fi
+
 # Check if logged in
 if ! az account show &> /dev/null; then
     echo "Not logged in to Azure. Running 'az login'..."
@@ -104,10 +114,37 @@ fi
 echo "Creating resource group if needed..."
 az group create --name "$RESOURCE_GROUP" --location "$LOCATION" --output none 2>/dev/null || true
 
+# Clean up existing Static Web App if it exists (allows clean redeployment)
+echo "Checking for existing Static Web App..."
+EXISTING_SWA=$(az staticwebapp list \
+    --resource-group "$RESOURCE_GROUP" \
+    --query "[?starts_with(name, '$BASE_NAME')].name" \
+    --output tsv 2>/dev/null || true)
+
+if [ -n "$EXISTING_SWA" ]; then
+    echo "Found existing Static Web App: $EXISTING_SWA"
+    echo "Deleting existing Static Web App for clean redeployment..."
+    az staticwebapp delete \
+        --name "$EXISTING_SWA" \
+        --resource-group "$RESOURCE_GROUP" \
+        --yes \
+        --output none 2>/dev/null || true
+fi
+
 # Build the frontend
 echo "Building frontend..."
+
+# Change to chatbot directory (where package.json is located)
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+cd "$SCRIPT_DIR"
+
 npm install
-npm run build
+
+# Build with MCP server URL and token injected
+VITE_MCP_SERVER_URL="$MCP_URL" VITE_MCP_AUTH_TOKEN="${MCP_TOKEN:-}" npm run build
+
+# Copy staticwebapp.config.json to dist folder
+cp staticwebapp.config.json dist/
 
 # Deploy infrastructure
 echo "Deploying Azure infrastructure..."
@@ -137,7 +174,7 @@ DEPLOYMENT_TOKEN=$(az staticwebapp secrets list --name "$STATIC_WEB_APP_NAME" --
 
 # Deploy the application using SWA CLI
 echo ""
-echo "Deploying application code..."
+echo "Deploying application code (static frontend only - calls MCP server directly)..."
 
 # Check if SWA CLI is installed
 if ! command -v swa &> /dev/null; then
@@ -145,9 +182,8 @@ if ! command -v swa &> /dev/null; then
     npm install -g @azure/static-web-apps-cli
 fi
 
-# Deploy using SWA CLI
+# Deploy using SWA CLI - static only, no API
 swa deploy dist \
-    --api-location api \
     --deployment-token "$DEPLOYMENT_TOKEN" \
     --env production
 
@@ -156,7 +192,7 @@ echo "============================================="
 echo "Deployment Complete!"
 echo "============================================="
 echo "Chatbot URL: $STATIC_WEB_APP_URL"
+echo "MCP Server: $MCP_URL"
 echo ""
-echo "To view logs:"
-echo "  az monitor app-insights query --app $BASE_NAME-insights -g $RESOURCE_GROUP --analytics-query 'traces | order by timestamp desc | take 50'"
+echo "Note: The chatbot calls the MCP server directly."
 echo "============================================="

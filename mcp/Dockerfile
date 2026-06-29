@@ -25,7 +25,7 @@
 #   docker run -p 8080:8080 mcp-server
 # =============================================================================
 
-FROM python:3.11-slim as builder
+FROM python:3.12-slim as builder
 
 WORKDIR /build
 
@@ -42,7 +42,7 @@ RUN pip wheel --no-cache-dir --wheel-dir /build/wheels -r requirements.txt
 # =============================================================================
 # Runtime stage
 # =============================================================================
-FROM python:3.11-slim
+FROM python:3.12-slim
 
 WORKDIR /app
 
@@ -71,8 +71,8 @@ USER mcp
 # Expose port
 EXPOSE 8080
 
-# Health check
-HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
+# Health check - more generous start period for container startup
+HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=5 \
     CMD python -c "import urllib.request; urllib.request.urlopen('http://localhost:8080/health')" || exit 1
 
 # Start server

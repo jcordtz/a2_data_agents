@@ -6,6 +6,8 @@
  * GET /api/health
  */
 
+const fetch = require('node-fetch')
+
 const MCP_SERVER_URL = process.env.MCP_SERVER_URL || 'http://localhost:8080'
 
 module.exports = async function (context, req) {
@@ -16,10 +18,12 @@ module.exports = async function (context, req) {
     let mcpStatus = 'unknown'
     
     try {
-      const mcpResponse = await fetch(`${MCP_SERVER_URL}/health`, {
-        method: 'GET',
-        signal: AbortSignal.timeout(5000),
-      })
+      // Simple timeout wrapper for node-fetch
+      const timeoutPromise = new Promise((_, reject) => 
+        setTimeout(() => reject(new Error('timeout')), 5000)
+      )
+      const fetchPromise = fetch(`${MCP_SERVER_URL}/health`, { method: 'GET' })
+      const mcpResponse = await Promise.race([fetchPromise, timeoutPromise])
       mcpStatus = mcpResponse.ok ? 'healthy' : 'unhealthy'
     } catch (error) {
       mcpStatus = 'unreachable'

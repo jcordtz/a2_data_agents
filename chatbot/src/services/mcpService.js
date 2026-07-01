@@ -38,14 +38,10 @@ export async function fetchAgents() {
   }
   
   try {
-    console.log('Fetching agents from:', `${MCP_SERVER_URL}/mcp/v1/tools/call`)
-    const response = await fetch(`${MCP_SERVER_URL}/mcp/v1/tools/call`, {
-      method: 'POST',
+    console.log('Fetching agents from:', `${MCP_SERVER_URL}/api/agents`)
+    const response = await fetch(`${MCP_SERVER_URL}/api/agents`, {
+      method: 'GET',
       headers: getMcpHeaders(),
-      body: JSON.stringify({
-        name: 'list_agents',
-        arguments: {},
-      }),
     })
     
     if (!response.ok) {
@@ -56,7 +52,14 @@ export async function fetchAgents() {
     
     const data = await response.json()
     console.log('Agents response:', data)
-    return data.content?.agents || data.agents || []
+
+    // Normalize agent fields: MCP server uses agent_id; UI expects id and name
+    const agents = Array.isArray(data) ? data : data.agents || []
+    return agents.map(a => ({
+      ...a,
+      id: a.agent_id || a.id,
+      name: a.description || `${a.schema_name}.${a.table_name}` || a.agent_id,
+    }))
   } catch (error) {
     console.error('Error fetching agents:', error)
     if (error.message.includes('Failed to fetch')) {

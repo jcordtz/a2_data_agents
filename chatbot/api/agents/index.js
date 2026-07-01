@@ -36,40 +36,19 @@ module.exports = async function (context, req) {
       headers['Authorization'] = `Bearer ${MCP_AUTH_TOKEN}`
     }
 
-    // First try to get agents from MCP tools/call
-    const mcpResponse = await fetch(`${MCP_SERVER_URL}/mcp/v1/tools/call`, {
-      method: 'POST',
-      headers,
-      body: JSON.stringify({
-        name: 'list_agents',
-        arguments: {},
-      }),
-    })
-
-    if (mcpResponse.ok) {
-      const data = await mcpResponse.json()
-      const agents = data.content?.agents || data.agents || []
-      
-      context.res = {
-        status: 200,
-        body: { agents },
-        headers: { 'Content-Type': 'application/json' },
-      }
-      return
-    }
-
-    // Fallback: try the direct agents API
+    // Fetch agents from the direct REST API
     const directResponse = await fetch(`${MCP_SERVER_URL}/api/agents`, {
       method: 'GET',
       headers,
     })
 
     if (directResponse.ok) {
-      const agents = await directResponse.json()
+      const data = await directResponse.json()
+      const agents = Array.isArray(data) ? data : data.agents || []
       
       context.res = {
         status: 200,
-        body: { agents: Array.isArray(agents) ? agents : agents.agents || [] },
+        body: { agents },
         headers: { 'Content-Type': 'application/json' },
       }
       return

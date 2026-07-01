@@ -201,10 +201,7 @@ if [ "$USE_CONTAINER_APPS" = true ]; then
     ACR_NAME=$(echo "$DEPLOYMENT_OUTPUT" | jq -r '.acrName.value // empty')
     
     if [ -n "$ACR_NAME" ]; then
-        # Login to ACR
-        az acr login --name "$ACR_NAME"
-        
-        # Build and push
+        # Build and push using ACR build (no local Docker required)
         az acr build \
             --registry "$ACR_NAME" \
             --image mcp-server:latest \

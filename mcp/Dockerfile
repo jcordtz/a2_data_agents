@@ -57,8 +57,8 @@ RUN pip install --no-cache-dir /wheels/* && rm -rf /wheels
 COPY mcp_server.py .
 COPY __init__.py .
 
-# Create data directory for agent registry
-RUN mkdir -p /data && chown -R mcp:mcp /data
+# Create data directory for agent registry and set ownership
+RUN mkdir -p /data && chown -R mcp:mcp /data && chown -R mcp:mcp /app
 
 # Environment variables
 ENV MCP_SERVER_PORT=8080

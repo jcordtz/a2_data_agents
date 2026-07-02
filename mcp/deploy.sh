@@ -215,20 +215,35 @@ if [ "$USE_CONTAINER_APPS" = true ]; then
         CONTAINER_ENV_NAME="${MCP_NAME}-env"
         
         if [ -n "$CONTAINER_APP_NAME" ]; then
-            print_info "Updating container app with MCP server image..."
-            
-            # Update with the new image, correct port, and min replicas
-            az containerapp ingress update \
-                --name "$CONTAINER_APP_NAME" \
-                --resource-group "$RESOURCE_GROUP" \
-                --target-port 8080 \
-                --output none
-            
+            print_info "Waiting for container app to be ready before updating..."
+            for i in {1..12}; do
+                CA_STATE=$(az containerapp show \
+                    --name "$CONTAINER_APP_NAME" \
+                    --resource-group "$RESOURCE_GROUP" \
+                    --query "properties.provisioningState" \
+                    --output tsv 2>/dev/null || echo "Unknown")
+                if [ "$CA_STATE" = "Succeeded" ]; then
+                    print_success "Container app is ready (state: $CA_STATE)"
+                    break
+                fi
+                if [ "$i" -eq 12 ]; then
+                    print_info "Container app provisioning state: $CA_STATE — proceeding anyway"
+                else
+                    print_info "Container app state: $CA_STATE, waiting... ($i/12)"
+                    sleep 15
+                fi
+            done
+
+            print_info "Updating container app with MCP server image and ingress port..."
+
+            # Update image, port, and replicas in a single operation to avoid race conditions
             az containerapp update \
                 --name "$CONTAINER_APP_NAME" \
                 --resource-group "$RESOURCE_GROUP" \
                 --image "${ACR_NAME}.azurecr.io/mcp-server:latest" \
                 --min-replicas 1 \
+                --target-port 8080 \
+                --ingress external \
                 --output none
             
             print_success "Container app updated"

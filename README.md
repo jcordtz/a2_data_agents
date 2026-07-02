@@ -29,6 +29,36 @@ An overall **chatbot interface** then orchestrates these agents through a Model 
 
 ---
 
+## Recent Improvements
+
+### MCP Server & Agent Interface Enhancements
+- **Enhanced Logging**: Detailed logging throughout the query pipeline helps diagnose issues
+- **Better Error Reporting**: Clear error messages when Azure OpenAI or database connections fail
+- **Diagnostics Endpoint**: New `/api/diagnostics/{agent_id}` endpoint tests agent connectivity
+- **Improved Error Handling**: Graceful degradation and timeout management (120s for agent queries)
+- **Configuration Validation**: Validates all required Azure OpenAI settings at initialization
+
+### Master Script (`run.sh`) Enhancements
+- **Resource Group Lifecycle Management**: Automatically detects and offers to delete existing resource groups
+- **Smart Deletion with Waiting**: Deletes and waits for completion before proceeding (up to 10 minutes)
+- **Auto-Confirmation for CI/CD**: The `--yes` flag now covers resource group deletion, perfect for automated deployments
+- **Dry-Run Mode**: Preview all actions without executing
+- **Progress Reporting**: Clear feedback during long-running operations
+
+### Usage Examples
+```bash
+# Clean redeployment - auto-deletes existing RG
+./run.sh --all --resource-group my-rg --yes
+
+# Interactive - prompts if RG exists
+./run.sh --all --resource-group my-rg
+
+# Diagnose agent issues
+curl "http://localhost:8080/api/diagnostics/hr_employees"
+```
+
+---
+
 ## Features
 
 - **Multi-Database Support**: Connect to Oracle, SQL Server, PostgreSQL, and IBM DB2 LUW
@@ -391,7 +421,7 @@ The `run.sh` script orchestrates all solution components in the correct order:
 # Preview without executing (dry run)
 ./run.sh --all --resource-group my-rg --dry-run
 
-# Auto-confirm all prompts (useful for CI/CD)
+# Auto-confirm all prompts and delete existing resource group (useful for CI/CD)
 ./run.sh --all --csv tables.csv --resource-group my-rg --yes
 ```
 
@@ -404,8 +434,28 @@ The `run.sh` script orchestrates all solution components in the correct order:
 - `--all` - Run all steps in order
 
 **Additional options:**
-- `--yes`, `-y` - Auto-confirm all prompts (skip interactive confirmations)
+- `--yes`, `-y` - Auto-confirm all prompts including resource group deletion
 - `--dry-run` - Preview what would be done without executing
+
+**Resource Group Handling:**
+When deploying (`--deploy`, `--mcp`, or `--chatbot` steps), the script automatically checks if the resource group exists. If it does, you'll be prompted with three options:
+1. Delete and recreate the resource group (recommended for clean deployments)
+2. Keep existing and continue (add to existing resources)
+3. Abort
+
+With the `--yes` flag, existing resource groups are automatically deleted without prompting. The deletion waits for completion (up to 10 minutes) before proceeding with deployment.
+
+Examples:
+```bash
+# Clean deployment - delete existing RG
+./run.sh --all --resource-group my-rg --yes
+
+# Interactive - will prompt if RG exists
+./run.sh --all --resource-group my-rg
+
+# Check and delete only
+./run.sh --deploy --mcp --resource-group my-rg --yes
+```
 
 ### MCP Server Operations
 
@@ -756,23 +806,238 @@ az deployment group create \
 
 ### MCP Server Issues
 
-1. **Agent not found**: Verify agent is registered with `GET /api/agents`
-2. **Connection refused**: Check agent endpoint is accessible from MCP server
-3. **Authentication failed**: Verify API key is correct
-4. **Container App "Deployment Progress Deadline Exceeded"**: The deploy script now automatically cleans up existing resources before redeployment. If issues persist, manually delete the Container App in Azure portal and redeploy.
-5. **CORS errors from chatbot**: Ensure the chatbot is accessing the MCP server over HTTPS. The MCP server has CORS enabled for all origins.
-6. **Auth token error "value or keyVaultUrl and identity should be provided"**: This is fixed - the MCP server now uses a placeholder value when no auth token is configured.
+#### "No Response Returned" / Empty Answer
+
+When queries return empty responses, follow this diagnostic workflow:
+
+1. **Check MCP Server Health:**
+   ```bash
+   curl http://localhost:8080/health
+   # Expected: { "status": "healthy", "agents_registered": 1 }
+   ```
+
+2. **Check Agent Registration:**
+   ```bash
+   curl http://localhost:8080/api/agents
+   # Should list your agents with all required fields
+   ```
+
+3. **Run Agent Diagnostics:**
+   ```bash
+   curl "http://localhost:8080/api/diagnostics/your-agent-id"
+   # Checks:
+   # - endpoint_health: Agent endpoint is accessible
+   # - list_tables: Agent can connect to database
+   ```
+
+4. **Test Agent Directly:**
+   ```bash
+   curl -X POST "https://your-function.azurewebsites.net/api/query" \
+     -H "x-functions-key: your-function-key" \
+     -H "Content-Type: application/json" \
+     -d '{"question": "How many tables are in the database?"}'
+   ```
+
+5. **Check Azure Function Logs:**
+   - In Azure Portal → Function App → Monitor → Log stream
+   - Look for "Processing question:" and "Error" messages
+   - Verify Azure OpenAI configuration:
+     - `AZURE_OPENAI_ENDPOINT`
+     - `AZURE_OPENAI_API_KEY`
+     - `AZURE_OPENAI_API_VERSION`
+     - `AZURE_OPENAI_DEPLOYMENT`
+
+**Common Issues:**
+- **Azure OpenAI not configured**: Set all `AZURE_OPENAI_*` environment variables
+- **Database connection failed**: Check credentials in security XML files
+- **Function timeout**: Agent processing took > 60s (increase timeout or optimize query)
+
+See [TROUBLESHOOTING.md](TROUBLESHOOTING.md) for detailed diagnostic steps.
+
+#### Connection Refused
+
+1. Verify function URL is correct and publicly accessible
+2. Check function app is running: `az functionapp show -n your-function -g your-rg`
+3. Test function endpoint directly (not through MCP)
+
+#### Deployment Progress Deadline Exceeded
+
+The deploy script automatically cleans up existing resources before redeployment. If issues persist:
+1. Manually delete the Container App in Azure portal
+2. Redeploy: `./mcp/deploy.sh --resource-group your-rg --location eastus`
+
+#### CORS Errors from Chatbot
+
+- Ensure chatbot is accessing MCP server over HTTPS
+- MCP server has CORS enabled for all origins
+- Check browser console for specific error message
+
+#### Agent Registration Failures
+
+1. Verify agent endpoint is accessible from MCP server location
+2. Check API key is correct: `az functionapp keys list -n your-function -g your-rg`
+3. Use diagnostics endpoint to test connectivity
+
+#### "Agent not found" Errors
+
+1. Verify agent was registered: `curl http://localhost:8080/api/agents`
+2. Check agent ID matches exactly (case-sensitive)
+3. Re-register if needed: `./mcp/register_agent.sh --agent-id hr_employees --endpoint ...`
 
 ---
 
-## Contributing
+## Diagnostics and Debugging
 
-1. Fork the repository
-2. Create a feature branch
-3. Make your changes with tests
-4. Submit a pull request
+### Enable Verbose Logging
 
-Please ensure all code includes appropriate documentation headers.
+**MCP Server (local):**
+```bash
+export LOG_LEVEL=DEBUG
+python mcp/mcp_server.py
+```
+
+**Azure Function (local):**
+```bash
+# In local.settings.json
+{
+  "logging": {
+    "level": "debug"
+  }
+}
+```
+
+### MCP Server Diagnostics Endpoint
+
+```bash
+# Get comprehensive agent diagnostics
+curl "http://localhost:8080/api/diagnostics/hr_employees"
+
+# Returns:
+{
+  "agent_id": "hr_employees",
+  "endpoint": "https://your-function.azurewebsites.net",
+  "status": "active",
+  "tests": {
+    "endpoint_health": {
+      "status": "ok",
+      "status_code": 200
+    },
+    "list_tables": {
+      "status": "ok",
+      "table_count": 5
+    }
+  }
+}
+```
+
+### Database Connection Verification
+
+```bash
+# Test each database type
+python -c "from databases.oracle import OracleConnector; c = OracleConnector.from_host('db.example.com'); print('Oracle OK')"
+python -c "from databases.mssql import MSSQLConnector; c = MSSQLConnector.from_host('sql.example.com'); print('SQL Server OK')"
+python -c "from databases.postgres import PostgresConnector; c = PostgresConnector.from_host('pg.example.com'); print('PostgreSQL OK')"
+python -c "from databases.ibmdb2 import IBMDB2Connector; c = IBMDB2Connector.from_host('db2.example.com'); print('DB2 OK')"
+```
+
+### Agent Test Queries
+
+```bash
+# Test agent with simple questions
+curl -X POST "http://localhost:8080/mcp/v1/tools/call" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "query_table",
+    "arguments": {
+      "agent_id": "hr_employees",
+      "question": "How many rows are in this table?"
+    }
+  }'
+
+# Test with count query
+curl -X POST "http://localhost:8080/mcp/v1/tools/call" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "query_table",
+    "arguments": {
+      "agent_id": "hr_employees",
+      "question": "Count the total number of records"
+    }
+  }'
+```
+
+---
+
+## Performance Tuning
+
+### Query Optimization
+
+1. **Add database indexes** on frequently queried columns
+2. **Monitor query execution** in Azure Application Insights
+3. **Adjust timeouts** if queries consistently exceed 60s:
+   - Azure Function host.json: `functionTimeout` (max 3600s)
+   - MCP server: `timeout=120` in httpx client (configurable)
+
+### Scalability
+
+1. **Azure Functions**: Automatically scales (Elastic Premium plan supports 1-10 instances)
+2. **MCP Server**: Container Apps auto-scale based on HTTP requests
+3. **Database connections**: Connection pooling configured with SQLAlchemy
+
+### Monitoring
+
+1. **Application Insights**: View in Azure Portal
+   - Custom metrics for query timing
+   - Dependency tracking for database calls
+   - Exception tracking and logs
+
+2. **MCP Server Logs**: Check Container App logs in Azure Portal
+
+3. **Agent Metrics**: Via function app diagnostics
+
+---
+
+## Security Best Practices
+
+1. **Never commit credentials** to version control
+2. **Use Azure Key Vault** for storing database passwords (configured in security/*.xml)
+3. **Enable authentication** on MCP server (auto-generated token during deployment)
+4. **Use HTTPS** for all external connections
+5. **Restrict database access** to minimum required permissions
+6. **Rotate API keys** regularly:
+   - Azure OpenAI: Rotate keys in Azure Portal
+   - Function app: Regenerate keys with `az functionapp keys set`
+   - MCP auth token: Redeploy with new token
+
+---
+
+## Deployment Checklist
+
+- [ ] All database connections configured in `security/*.xml`
+- [ ] Azure OpenAI endpoint and keys set
+- [ ] CSV file prepared with tables to generate agents from
+- [ ] Azure resource group created or ready for auto-creation
+- [ ] Azure CLI authenticated: `az login`
+- [ ] Required database drivers installed locally (for initial testing)
+- [ ] npm installed (for chatbot deployment)
+- [ ] Docker installed (for MCP server deployment)
+
+---
+
+## Support and Documentation
+
+- **Agent Documentation**: [agents/README.md](agents/README.md)
+- **MCP Server Documentation**: [mcp/README.md](mcp/README.md)
+- **Chatbot Documentation**: [chatbot/README.md](chatbot/README.md)
+- **Security Configuration**: [security/README.md](security/README.md)
+- **Troubleshooting Guide**: [TROUBLESHOOTING.md](TROUBLESHOOTING.md)
+- **Database Connectors**: Docstrings in [databases/](databases/)
+
+---
+
+## License
+
+MIT License - Copyright (c) 2026 - See [LICENSE](LICENSE) file
 
 ## Quick Start
 

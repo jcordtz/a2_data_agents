@@ -89,7 +89,7 @@ NC='\033[0m' # No Color
 # Default configuration
 CSV_FILE="sample_tables.csv"
 OUTPUT_DIR="./generated_agents"
-RESOURCE_GROUP=""
+RESOURCE_GROUP="a2-data-agent-res"
 LOCATION="eastus"
 MCP_URL=""
 MCP_TOKEN=""

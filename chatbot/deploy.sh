@@ -174,7 +174,8 @@ DEPLOYMENT_TOKEN=$(az staticwebapp secrets list --name "$STATIC_WEB_APP_NAME" --
 
 # Deploy the application using SWA CLI
 echo ""
-echo "Deploying application code (static frontend only - calls MCP server directly)..."
+echo "Deploying application code..."
+echo "Note: The chatbot calls the MCP server directly (frontend-only deployment)"
 
 # Check if SWA CLI is installed
 if ! command -v swa &> /dev/null; then
@@ -182,7 +183,8 @@ if ! command -v swa &> /dev/null; then
     npm install -g @azure/static-web-apps-cli
 fi
 
-# Deploy using SWA CLI - static only, no API
+# Deploy using SWA CLI
+# Platform and API runtime are configured in staticwebapp.config.json
 swa deploy dist \
     --deployment-token "$DEPLOYMENT_TOKEN" \
     --env production

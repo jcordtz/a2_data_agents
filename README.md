@@ -854,6 +854,50 @@ When queries return empty responses, follow this diagnostic workflow:
 
 See [TROUBLESHOOTING.md](TROUBLESHOOTING.md) for detailed diagnostic steps.
 
+#### Chatbot Cannot See Agents
+
+If the chatbot displays "Cannot connect to MCP server" or "no agents available":
+
+1. **Check browser console (F12 → Console tab):**
+   - Look for error messages with details about the connection failure
+   - The MCP Service logs the server URL it's trying to connect to
+   - Check for CORS errors or network errors
+
+2. **Verify MCP Server URL in Build:**
+   ```bash
+   # The MCP URL must be baked into the frontend at build time
+   # Check that it was passed correctly to the chatbot deployment:
+   grep "VITE_MCP_SERVER_URL" chatbot/deploy.sh
+   ```
+
+3. **Check MCP Server Health from Browser:**
+   - Open your browser's DevTools (F12)
+   - Go to Console tab
+   - Try accessing the MCP server directly:
+   ```javascript
+   fetch('https://your-mcp-server-url/health').then(r => r.json()).then(console.log)
+   ```
+
+4. **Common Issues:**
+   - **Server URL wrong**: The chatbot build must receive the correct MCP URL via `--mcp-url` flag
+   - **Server not ready**: MCP Container App may still be starting (wait 2-3 minutes after deployment)
+   - **Auth token mismatch**: If `--mcp-token` was provided, it must match on both sides
+   - **CORS not enabled**: Verify MCP server has `allow_origins=["*"]` in CORS config
+   - **Firewall/Network**: Azure Static Web App cannot reach Azure Container App (rare - check NSGs)
+
+5. **Redeploy chatbot if MCP URL changed:**
+   ```bash
+   # The MCP URL is embedded at build time, so if MCP server URL changes:
+   bash ./chatbot/deploy.sh --resource-group my-rg --mcp-url https://new-url.azurecontainerapps.io
+   ```
+
+6. **Test MCP Server is Accessible:**
+   ```bash
+   # From your local machine
+   curl https://your-mcp-server-url/api/agents
+   # From the chatbot, check browser Network tab (F12) for the /api/agents request
+   ```
+
 #### Connection Refused
 
 1. Verify function URL is correct and publicly accessible

@@ -9,11 +9,28 @@
 const MCP_SERVER_URL = import.meta.env.VITE_MCP_SERVER_URL || ''
 const MCP_AUTH_TOKEN = import.meta.env.VITE_MCP_AUTH_TOKEN || ''
 
-// Log configuration for debugging (token is partially hidden)
-console.log('MCP Service initialized:', {
-  serverUrl: MCP_SERVER_URL || '(not configured)',
-  hasAuthToken: MCP_AUTH_TOKEN ? `yes (${MCP_AUTH_TOKEN.slice(0, 8)}...)` : 'no',
-})
+// Validate and warn about suspicious URLs
+if (MCP_SERVER_URL) {
+  console.log('MCP Service initialized:', {
+    serverUrl: MCP_SERVER_URL,
+    hasAuthToken: MCP_AUTH_TOKEN ? `yes (${MCP_AUTH_TOKEN.slice(0, 8)}...)` : 'no',
+  })
+  
+  // Warn if URL looks suspicious (documentation links, localhost when deployed, etc)
+  if (MCP_SERVER_URL.includes('aka.ms') || MCP_SERVER_URL.includes('docs.microsoft')) {
+    console.error('❌ ERROR: MCP_SERVER_URL appears to be a documentation link:', MCP_SERVER_URL)
+    console.error('   This usually means the build did not receive the correct MCP URL')
+    console.error('   The chatbot needs to be rebuilt with the correct VITE_MCP_SERVER_URL')
+  } else if (MCP_SERVER_URL.includes('localhost') || MCP_SERVER_URL.includes('127.0.0.1')) {
+    console.warn('⚠️  Warning: MCP_SERVER_URL points to localhost')
+    console.warn('   This will not work when accessed from a browser (need Azure-hosted MCP server)')
+  } else if (!MCP_SERVER_URL.includes('https://')) {
+    console.warn('⚠️  Warning: MCP_SERVER_URL does not use HTTPS:', MCP_SERVER_URL)
+    console.warn('   This may cause mixed content errors in production')
+  }
+} else {
+  console.warn('⚠️  MCP Server URL is not configured')
+}
 
 /**
  * Get headers for MCP requests
@@ -34,24 +51,39 @@ function getMcpHeaders() {
  */
 export async function fetchAgents() {
   if (!MCP_SERVER_URL) {
-    throw new Error('MCP Server URL is not configured. Check build environment variables.')
+    console.error('MCP Server URL not configured')
+    console.error('  VITE_MCP_SERVER_URL env var:', process.env.VITE_MCP_SERVER_URL)
+    console.error('  import.meta.env.VITE_MCP_SERVER_URL:', import.meta.env.VITE_MCP_SERVER_URL)
+    throw new Error('MCP Server URL is not configured. Check build environment variables and rebuild.')
   }
   
   try {
-    console.log('Fetching agents from:', `${MCP_SERVER_URL}/api/agents`)
-    const response = await fetch(`${MCP_SERVER_URL}/api/agents`, {
+    const url = `${MCP_SERVER_URL}/api/agents`
+    console.log('🔍 Fetching agents from:', url)
+    console.log('   Authorization header:', getMcpHeaders().Authorization ? 'Bearer token set' : 'No auth')
+    
+    const response = await fetch(url, {
       method: 'GET',
       headers: getMcpHeaders(),
     })
     
     if (!response.ok) {
-      const errorText = await response.text().catch(() => '')
-      console.error('Failed to fetch agents:', response.status, errorText)
-      throw new Error(`Failed to fetch agents: ${response.status} - ${errorText || 'Server error'}`)
+      const errorText = await response.text().catch(() => '(no response body)')
+      console.error(`❌ HTTP ${response.status}: ${errorText}`)
+      
+      if (response.status === 401) {
+        throw new Error('Authentication failed (401). Check MCP auth token.')
+      } else if (response.status === 403) {
+        throw new Error('Access denied (403). Check CORS and authentication.')
+      } else if (response.status >= 500) {
+        throw new Error(`MCP Server error (${response.status}). Server may be down.`)
+      } else {
+        throw new Error(`Failed to fetch agents: ${response.status} - ${errorText}`)
+      }
     }
     
     const data = await response.json()
-    console.log('Agents response:', data)
+    console.log('✅ Agents received:', data)
 
     // Normalize agent fields: MCP server uses agent_id; UI expects id and name
     const agents = Array.isArray(data) ? data : data.agents || []
@@ -61,9 +93,11 @@ export async function fetchAgents() {
       name: a.description || `${a.schema_name}.${a.table_name}` || a.agent_id,
     }))
   } catch (error) {
-    console.error('Error fetching agents:', error)
+    console.error('❌ Error fetching agents:', error.message)
+    
     if (error.message.includes('Failed to fetch')) {
-      throw new Error(`Cannot connect to MCP server at ${MCP_SERVER_URL}. Check if the server is running and CORS is enabled.`)
+      console.error('   Network error - Server may be unreachable')
+      throw new Error(`Cannot connect to MCP server at ${MCP_SERVER_URL}.\n\nPossible causes:\n• Server is offline\n• Network/firewall blocking access\n• CORS not enabled\n• Wrong URL configured`)
     }
     throw error
   }

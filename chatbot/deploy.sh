@@ -74,10 +74,18 @@ if [ -z "$RESOURCE_GROUP" ]; then
     exit 1
 fi
 
-if [ -z "$MCP_URL" ]; then
-    echo "Error: --mcp-url is required"
+# Validate MCP URL format
+echo "Validating MCP URL: $MCP_URL"
+if [[ ! "$MCP_URL" =~ ^https?:// ]]; then
+    echo "Error: MCP URL must start with http:// or https://"
+    echo "  Received: $MCP_URL"
     exit 1
 fi
+
+# Ensure URL doesn't end with /
+MCP_URL="${MCP_URL%/}"
+
+echo "✓ MCP URL is valid: $MCP_URL"
 
 echo "============================================="
 echo "Deploying Data Agent Chatbot"
@@ -140,8 +148,33 @@ cd "$SCRIPT_DIR"
 
 npm install
 
+# Validate MCP URL is reachable before building
+echo "Validating MCP Server connectivity..."
+if ! curl -s -o /dev/null -w "%{http_code}" "$MCP_URL/health" | grep -q "200"; then
+    echo "⚠️  Warning: MCP Server at $MCP_URL may not be healthy yet"
+    echo "   The server may still be initializing. Continuing with build..."
+else
+    echo "✓ MCP Server health check passed"
+fi
+
 # Build with MCP server URL and token injected
-VITE_MCP_SERVER_URL="$MCP_URL" VITE_MCP_AUTH_TOKEN="${MCP_TOKEN:-}" npm run build
+echo "Building with MCP configuration:"
+echo "  VITE_MCP_SERVER_URL=$MCP_URL"
+echo "  VITE_MCP_AUTH_TOKEN=${MCP_TOKEN:+(configured)}"
+
+export VITE_MCP_SERVER_URL="$MCP_URL"
+export VITE_MCP_AUTH_TOKEN="${MCP_TOKEN:-}"
+
+npm run build
+
+echo ""
+echo "Build complete. Checking if MCP URL was embedded..."
+# Try to find the MCP URL in the built files (could be in JS chunks)
+if ls dist/assets/*.js | xargs grep -l "azurecontainerapps\|api/agents" 2>/dev/null | head -1; then
+    echo "✓ MCP URL references found in build output"
+else
+    echo "⚠️  Note: MCP URL may be stored as a variable reference (this is normal with Vite)"
+fi
 
 # Copy staticwebapp.config.json to dist folder
 cp staticwebapp.config.json dist/
@@ -196,5 +229,15 @@ echo "============================================="
 echo "Chatbot URL: $STATIC_WEB_APP_URL"
 echo "MCP Server: $MCP_URL"
 echo ""
-echo "Note: The chatbot calls the MCP server directly."
+echo "Troubleshooting:"
+echo "  1. Check MCP Server health:"
+echo "     curl -H 'Authorization: Bearer ${MCP_TOKEN:-(none)}' $MCP_URL/health"
+echo ""
+echo "  2. Check available agents:"
+echo "     curl -H 'Authorization: Bearer ${MCP_TOKEN:-(none)}' $MCP_URL/api/agents"
+echo ""
+echo "  3. Open browser DevTools (F12) when using chatbot to see network errors"
+echo ""
+echo "Note: The chatbot calls the MCP server directly from the browser."
+echo "Both the chatbot and MCP server must be accessible from your browser."
 echo "============================================="

@@ -539,28 +539,40 @@ if [ "$RUN_MCP" = true ]; then
         # Capture the MCP URL and auth token from deployment output
         MCP_OUTPUT=$(bash "$SCRIPT_DIR/mcp/deploy.sh" $MCP_DEPLOY_ARGS 2>&1 | tee /dev/tty)
         
-        # Extract structured output between markers
+        # Extract structured output between markers (most reliable)
         if echo "$MCP_OUTPUT" | grep -q "MCP_DEPLOYMENT_OUTPUT_START"; then
             DEPLOYED_MCP_URL=$(echo "$MCP_OUTPUT" | sed -n '/MCP_DEPLOYMENT_OUTPUT_START/,/MCP_DEPLOYMENT_OUTPUT_END/p' | grep "MCP_URL=" | cut -d'=' -f2-)
             DEPLOYED_MCP_TOKEN=$(echo "$MCP_OUTPUT" | sed -n '/MCP_DEPLOYMENT_OUTPUT_START/,/MCP_DEPLOYMENT_OUTPUT_END/p' | grep "MCP_AUTH_TOKEN=" | cut -d'=' -f2-)
         else
-            # Fallback: try to extract MCP URL from output
-            DEPLOYED_MCP_URL=$(echo "$MCP_OUTPUT" | grep -oE 'https?://[^ ]+' | tail -1)
+            # Fallback: extract from "MCP Server URL:" line - more specific than grepping all URLs
+            DEPLOYED_MCP_URL=$(echo "$MCP_OUTPUT" | grep "^.*MCP Server URL:" | sed -E 's/.*MCP Server URL: //' | tail -1)
         fi
         
+        # Validate extracted URL is a real Azure Container Apps URL (not a docs link)
         if [ -n "$DEPLOYED_MCP_URL" ]; then
-            print_success "MCP server deployed at: $DEPLOYED_MCP_URL"
-            # Use deployed URL for subsequent steps if not explicitly provided
-            if [ -z "$MCP_URL" ]; then
-                MCP_URL="$DEPLOYED_MCP_URL"
-            fi
-            # Use deployed token if not explicitly provided
-            if [ -z "$MCP_TOKEN" ] && [ -n "$DEPLOYED_MCP_TOKEN" ]; then
-                MCP_TOKEN="$DEPLOYED_MCP_TOKEN"
-                print_info "Using generated auth token for subsequent steps"
+            if echo "$DEPLOYED_MCP_URL" | grep -qE '^https://.*\.azurecontainerapps\.io'; then
+                print_success "MCP server deployed at: $DEPLOYED_MCP_URL"
+                # Use deployed URL for subsequent steps if not explicitly provided
+                if [ -z "$MCP_URL" ]; then
+                    MCP_URL="$DEPLOYED_MCP_URL"
+                fi
+                # Use deployed token if not explicitly provided
+                if [ -z "$MCP_TOKEN" ] && [ -n "$DEPLOYED_MCP_TOKEN" ]; then
+                    MCP_TOKEN="$DEPLOYED_MCP_TOKEN"
+                    print_info "Using generated auth token for subsequent steps"
+                fi
+            else
+                print_error "Invalid MCP URL extracted: $DEPLOYED_MCP_URL"
+                print_info "Expected format: https://<name>.azurecontainerapps.io"
+                print_info "Full MCP output:"
+                echo "$MCP_OUTPUT" | tail -50
+                exit 1
             fi
         else
-            print_success "MCP server deployment complete"
+            print_error "Failed to extract MCP Server URL from deployment output"
+            print_info "Full output (last 50 lines):"
+            echo "$MCP_OUTPUT" | tail -50
+            exit 1
         fi
     fi
 fi
@@ -610,6 +622,15 @@ if [ "$RUN_CHATBOT" = true ]; then
         print_info "Either deploy MCP server first (--mcp) or provide URL (--mcp-url)"
         exit 1
     fi
+    
+    # Validate the MCP URL format
+    if ! echo "$EFFECTIVE_MCP_URL" | grep -qE '^https?://'; then
+        print_error "Invalid MCP URL: $EFFECTIVE_MCP_URL"
+        print_info "URL must start with http:// or https://"
+        exit 1
+    fi
+    
+    print_info "Using MCP Server URL: $EFFECTIVE_MCP_URL"
     
     if [ "$DRY_RUN" = true ]; then
         print_info "[DRY RUN] Would run: chatbot/deploy.sh --resource-group $RESOURCE_GROUP --location westeurope --mcp-url $EFFECTIVE_MCP_URL"

@@ -31,7 +31,8 @@ function App() {
       console.error('Failed to load agents:', err)
       // More descriptive error message
       const serverUrl = import.meta.env.VITE_MCP_SERVER_URL || '(not configured)'
-      setError(`Failed to connect to MCP server at ${serverUrl}. ${err.message}`)
+      const errorDetail = err.message || 'Unknown error'
+      setError(`Cannot connect to MCP server\n\nServer: ${serverUrl}\nError: ${errorDetail}\n\nCheck browser console (F12) for details.`)
     } finally {
       setLoading(false)
     }

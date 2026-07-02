@@ -161,6 +161,7 @@ SOFTWARE.
 import json
 import configparser
 import importlib
+import logging
 from pathlib import Path
 from typing import Optional, Dict, Any, List, Callable
 from dataclasses import dataclass, field
@@ -172,6 +173,10 @@ import sys
 from pathlib import Path
 # Add parent directory to path for imports
 sys.path.insert(0, str(Path(__file__).parent.parent))
+
+# Configure logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 
 # Database connector mapping
@@ -359,11 +364,31 @@ class DataAgent:
     def _init_openai_client(self) -> AzureOpenAI:
         """Initialize the Azure OpenAI client."""
         azure_config = self.config["azure_openai"]
-        return AzureOpenAI(
-            azure_endpoint=azure_config["endpoint"],
-            api_key=azure_config["api_key"],
-            api_version=azure_config["api_version"],
-        )
+        
+        required_fields = ["endpoint", "api_key", "api_version"]
+        missing_fields = [f for f in required_fields if not azure_config.get(f)]
+        
+        if missing_fields:
+            logger.error(f"Missing Azure OpenAI configuration: {missing_fields}")
+            logger.error(f"Available config keys: {list(azure_config.keys())}")
+            raise ValueError(
+                f"Azure OpenAI configuration incomplete. Missing: {', '.join(missing_fields)}. "
+                "Set via environment variables (AZURE_OPENAI_*) or agent_config.ini"
+            )
+        
+        logger.info(f"Initializing Azure OpenAI client with endpoint: {azure_config['endpoint']}")
+        
+        try:
+            client = AzureOpenAI(
+                azure_endpoint=azure_config["endpoint"],
+                api_key=azure_config["api_key"],
+                api_version=azure_config["api_version"],
+            )
+            logger.info("Azure OpenAI client initialized successfully")
+            return client
+        except Exception as e:
+            logger.error(f"Failed to initialize Azure OpenAI client: {e}")
+            raise
 
     def _get_target_language(self) -> Dict[str, str]:
         """Get the target language based on country code from config."""
@@ -1023,56 +1048,90 @@ This table enables you to:
         Returns:
             AgentResponse with the answer and any data
         """
+        logger.info(f"Processing question: {question}")
         self.messages.append({"role": "user", "content": question})
         
         tool_calls_made = []
         sql_executed = None
         
         max_iterations = int(self.config["agent"].get("max_iterations", 10))
+        deployment_name = self.config["azure_openai"].get("deployment_name")
         
-        for _ in range(max_iterations):
-            response = self.client.chat.completions.create(
-                model=self.config["azure_openai"]["deployment_name"],
-                messages=self.messages,
-                tools=self.tools,
-                tool_choice="auto",
-                temperature=float(self.config["agent"].get("temperature", 0.0)),
+        if not deployment_name:
+            logger.error("Azure OpenAI deployment_name not configured")
+            return AgentResponse(
+                answer="Error: Azure OpenAI deployment not configured. Set AZURE_OPENAI_DEPLOYMENT.",
+                tool_calls=[]
             )
+        
+        logger.info(f"Starting agent loop (max {max_iterations} iterations) with deployment: {deployment_name}")
+        logger.info(f"Available tools: {len(self.tools)}")
+        
+        for iteration in range(max_iterations):
+            logger.debug(f"Iteration {iteration + 1}/{max_iterations}")
+            
+            try:
+                response = self.client.chat.completions.create(
+                    model=deployment_name,
+                    messages=self.messages,
+                    tools=self.tools,
+                    tool_choice="auto",
+                    temperature=float(self.config["agent"].get("temperature", 0.0)),
+                )
+                
+                logger.debug(f"OpenAI response: {response.choices[0].message.tool_calls if response.choices[0].message.tool_calls else 'No tool calls'}")
 
-            message = response.choices[0].message
+                message = response.choices[0].message
 
-            # If no tool calls, we have the final answer
-            if not message.tool_calls:
-                self.messages.append({"role": "assistant", "content": message.content})
+                # If no tool calls, we have the final answer
+                if not message.tool_calls:
+                    answer = message.content or "I couldn't generate a response."
+                    logger.info(f"Final answer (no tool calls): {answer[:100]}...")
+                    self.messages.append({"role": "assistant", "content": answer})
+                    return AgentResponse(
+                        answer=answer,
+                        data=getattr(self, "_last_result_df", None),
+                        sql_executed=sql_executed,
+                        tool_calls=tool_calls_made if tool_calls_made else None,
+                    )
+
+                # Process tool calls
+                logger.info(f"Processing {len(message.tool_calls)} tool calls")
+                self.messages.append(message)
+
+                for tool_call in message.tool_calls:
+                    tool_name = tool_call.function.name
+                    logger.debug(f"Executing tool: {tool_name}")
+                    
+                    tool_result = self._execute_tool_call(tool_call)
+                    
+                    # Track tool calls and SQL
+                    call_info = {
+                        "tool": tool_name,
+                        "args": json.loads(tool_call.function.arguments),
+                    }
+                    tool_calls_made.append(call_info)
+                    
+                    if tool_name == "execute_query":
+                        sql_executed = json.loads(tool_call.function.arguments).get("query")
+                        logger.info(f"SQL executed: {sql_executed[:100]}...")
+
+                    self.messages.append({
+                        "role": "tool",
+                        "tool_call_id": tool_call.id,
+                        "content": tool_result,
+                    })
+                    
+                    logger.debug(f"Tool result length: {len(tool_result)} chars")
+            
+            except Exception as e:
+                logger.error(f"Error in iteration {iteration + 1}: {e}")
                 return AgentResponse(
-                    answer=message.content or "I couldn't generate a response.",
-                    data=getattr(self, "_last_result_df", None),
-                    sql_executed=sql_executed,
-                    tool_calls=tool_calls_made if tool_calls_made else None,
+                    answer=f"Error during processing: {str(e)}",
+                    tool_calls=tool_calls_made
                 )
 
-            # Process tool calls
-            self.messages.append(message)
-
-            for tool_call in message.tool_calls:
-                tool_result = self._execute_tool_call(tool_call)
-                
-                # Track tool calls and SQL
-                call_info = {
-                    "tool": tool_call.function.name,
-                    "args": json.loads(tool_call.function.arguments),
-                }
-                tool_calls_made.append(call_info)
-                
-                if tool_call.function.name == "execute_query":
-                    sql_executed = json.loads(tool_call.function.arguments).get("query")
-
-                self.messages.append({
-                    "role": "tool",
-                    "tool_call_id": tool_call.id,
-                    "content": tool_result,
-                })
-
+        logger.warning("Reached maximum iterations without completing task")
         return AgentResponse(
             answer="I reached the maximum number of iterations without completing the task.",
             tool_calls=tool_calls_made,

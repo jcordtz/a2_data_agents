@@ -563,6 +563,74 @@ async def health_check() -> Dict[str, Any]:
     }
 
 
+@app.get("/api/diagnostics/{agent_id}")
+async def agent_diagnostics(
+    agent_id: str,
+    authorized: bool = Depends(verify_auth)
+) -> Dict[str, Any]:
+    """Get diagnostic information about an agent."""
+    agent = registry.get(agent_id)
+    if not agent:
+        raise HTTPException(status_code=404, detail=f"Agent not found: {agent_id}")
+    
+    diagnostics = {
+        "agent_id": agent.agent_id,
+        "database_type": agent.database_type,
+        "host": agent.host,
+        "table": f"{agent.schema_name}.{agent.table_name}",
+        "endpoint": agent.endpoint,
+        "status": agent.status,
+        "registered_at": agent.registered_at,
+        "last_used": agent.last_used,
+        "tests": {}
+    }
+    
+    # Test endpoint connectivity
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            response = await client.get(
+                f"{agent.endpoint}/api/health",
+                headers={"x-functions-key": agent.api_key},
+            )
+            diagnostics["tests"]["endpoint_health"] = {
+                "status": "ok" if response.status_code == 200 else "error",
+                "status_code": response.status_code,
+                "message": response.text[:200] if response.text else ""
+            }
+    except Exception as e:
+        diagnostics["tests"]["endpoint_health"] = {
+            "status": "error",
+            "message": str(e)
+        }
+    
+    # Test list tables
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            response = await client.get(
+                f"{agent.endpoint}/api/tables",
+                headers={"x-functions-key": agent.api_key},
+            )
+            if response.status_code == 200:
+                tables = response.json().get("tables", [])
+                diagnostics["tests"]["list_tables"] = {
+                    "status": "ok",
+                    "table_count": len(tables),
+                    "tables": tables[:5]  # Show first 5
+                }
+            else:
+                diagnostics["tests"]["list_tables"] = {
+                    "status": "error",
+                    "status_code": response.status_code
+                }
+    except Exception as e:
+        diagnostics["tests"]["list_tables"] = {
+            "status": "error",
+            "message": str(e)
+        }
+    
+    return diagnostics
+
+
 # =============================================================================
 # Tool Handlers
 # =============================================================================
@@ -700,7 +768,8 @@ async def _query_agent(
 ) -> Dict[str, Any]:
     """Query an agent endpoint."""
     try:
-        async with httpx.AsyncClient() as client:
+        logger.info(f"Querying agent {agent.agent_id} at {agent.endpoint}")
+        async with httpx.AsyncClient(timeout=120.0) as client:
             response = await client.post(
                 f"{agent.endpoint}/api/query",
                 json={
@@ -708,16 +777,38 @@ async def _query_agent(
                     "reset_conversation": reset_conversation
                 },
                 headers={"x-functions-key": agent.api_key},
-                timeout=60.0
             )
-            response.raise_for_status()
-            return response.json()
+            
+            logger.info(f"Agent response status: {response.status_code}")
+            
+            if response.status_code != 200:
+                logger.error(f"Agent returned error status {response.status_code}")
+                try:
+                    error_data = response.json()
+                    logger.error(f"Error response: {error_data}")
+                    return {
+                        "error": str(error_data.get("error", "Unknown error")),
+                        "answer": f"Error from agent: {error_data.get('error', 'Unknown error')}"
+                    }
+                except:
+                    return {
+                        "error": f"HTTP {response.status_code}",
+                        "answer": f"Agent returned error: HTTP {response.status_code}"
+                    }
+            
+            result = response.json()
+            logger.info(f"Agent response received with answer length: {len(result.get('answer', ''))}")
+            return result
+            
+    except httpx.TimeoutException as e:
+        logger.error(f"Timeout querying agent {agent.agent_id}: {e}")
+        return {"error": str(e), "answer": f"Timeout: The query took too long to complete"}
     except httpx.HTTPError as e:
         logger.error(f"HTTP error querying agent {agent.agent_id}: {e}")
-        return {"error": str(e), "answer": f"Error querying agent: {e}"}
+        return {"error": str(e), "answer": f"Connection error: {str(e)}"}
     except Exception as e:
-        logger.error(f"Error querying agent {agent.agent_id}: {e}")
-        return {"error": str(e), "answer": f"Error querying agent: {e}"}
+        logger.error(f"Error querying agent {agent.agent_id}: {e}", exc_info=True)
+        return {"error": str(e), "answer": f"Error: {str(e)}"}
 
 
 async def _fetch_table_info(agent: AgentInfo) -> Dict[str, Any]:

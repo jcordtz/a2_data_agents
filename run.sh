@@ -30,6 +30,13 @@
 #   4. register    - Register agents with MCP server
 #   5. chatbot     - Deploy chatbot to Azure Static Web Apps
 #
+# RESOURCE GROUP:
+#   If the specified resource group already exists, you will be prompted to:
+#   - Delete and recreate it, OR
+#   - Keep existing and continue, OR
+#   - Abort
+#   Use --yes flag to automatically delete existing resource group.
+#
 # OPTIONS:
 #   --all                   Run all steps (default if no step specified)
 #   --generate              Run only agent generation
@@ -45,7 +52,7 @@
 #   --mcp-url <url>         MCP server URL (for registration/chatbot)
 #   --mcp-token <token>     MCP server auth token
 #
-#   --yes, -y               Auto-confirm all prompts
+#   --yes, -y               Auto-confirm all prompts (including RG deletion)
 #   --dry-run               Show what would be done without executing
 #   --help                  Show this help message
 #
@@ -58,6 +65,9 @@
 #
 #   # Deploy agents and MCP server
 #   ./run.sh --deploy --mcp --resource-group my-rg
+#
+#   # Deploy with auto-confirmation (deletes existing RG if present)
+#   ./run.sh --all --resource-group my-rg --yes
 #
 #   # Register agents with existing MCP server
 #   ./run.sh --register --mcp-url https://mcp.example.com
@@ -135,14 +145,22 @@ usage() {
     echo "  --mcp-token <token>     MCP server auth token"
     echo ""
     echo "Other:"
-    echo "  --yes, -y               Auto-confirm all prompts"
+    echo "  --yes, -y               Auto-confirm all prompts (including RG deletion)"
     echo "  --dry-run               Show what would be done without executing"
     echo "  --help                  Show this help message"
+    echo ""
+    echo "Resource Group Handling:"
+    echo "  If the resource group already exists, you will be prompted to:"
+    echo "  - Delete and recreate it (recommended for clean deployment)"
+    echo "  - Keep existing and continue"
+    echo "  - Abort"
+    echo "  With --yes flag, existing RG will be automatically deleted."
     echo ""
     echo "Examples:"
     echo "  $0 --all --csv tables.csv --resource-group my-rg"
     echo "  $0 --generate --csv tables.csv"
     echo "  $0 --deploy --mcp --resource-group my-rg"
+    echo "  $0 --all --resource-group my-rg --yes  (auto-delete existing RG)"
     exit 1
 }
 
@@ -244,6 +262,107 @@ if [ "$RUN_DEPLOY" = true ] || [ "$RUN_MCP" = true ] || [ "$RUN_CHATBOT" = true 
     fi
 fi
 
+# Function to check if resource group exists and handle deletion
+check_resource_group() {
+    local rg_name="$1"
+    local skip_check="$2"
+    
+    if [ -z "$rg_name" ]; then
+        return 0
+    fi
+    
+    # Check if resource group exists (requires Azure CLI)
+    if ! command -v az &> /dev/null; then
+        print_warning "Azure CLI not found. Skipping resource group existence check."
+        return 0
+    fi
+    
+    print_info "Checking if resource group exists: $rg_name"
+    
+    if az group exists --name "$rg_name" --query "value" --output tsv 2>/dev/null | grep -q "true"; then
+        print_warning "Resource group '$rg_name' already exists"
+        echo ""
+        
+        # If not skipping check or in dry-run mode, ask user what to do
+        if [ "$skip_check" != "skip" ] && [ "$DRY_RUN" = false ]; then
+            local delete_choice
+            
+            if [ "$AUTO_YES" = true ]; then
+                print_info "Resource group will be deleted (--yes flag set)"
+                delete_choice="yes"
+            else
+                echo "Options:"
+                echo "  1) Delete and recreate the resource group"
+                echo "  2) Keep existing resource group and continue"
+                echo "  3) Abort"
+                echo ""
+                read -p "Choose option (1/2/3): " delete_choice
+                
+                case $delete_choice in
+                    1) delete_choice="yes" ;;
+                    2) delete_choice="no" ;;
+                    3) delete_choice="abort" ;;
+                    *)
+                        print_error "Invalid option. Aborting."
+                        exit 1
+                        ;;
+                esac
+            fi
+            
+            if [ "$delete_choice" = "yes" ]; then
+                print_warning "Deleting resource group: $rg_name"
+                
+                if ! az group delete \
+                    --name "$rg_name" \
+                    --yes \
+                    --no-wait; then
+                    print_error "Failed to delete resource group"
+                    exit 1
+                fi
+                
+                print_success "Resource group deletion initiated (running in background)"
+                print_info "Waiting for deletion to complete (this may take a few minutes)..."
+                
+                # Wait for deletion to complete
+                local max_attempts=120  # 10 minutes with 5-second intervals
+                local attempt=0
+                while [ $attempt -lt $max_attempts ]; do
+                    if ! az group exists --name "$rg_name" --query "value" --output tsv 2>/dev/null | grep -q "true"; then
+                        print_success "Resource group deleted successfully"
+                        return 0
+                    fi
+                    
+                    sleep 5
+                    attempt=$((attempt + 1))
+                    
+                    # Print progress every 6 attempts (30 seconds)
+                    if [ $((attempt % 6)) -eq 0 ]; then
+                        print_info "Still waiting for deletion... (${attempt}0 seconds elapsed)"
+                    fi
+                done
+                
+                print_error "Resource group deletion timed out after 10 minutes"
+                exit 1
+                
+            elif [ "$delete_choice" = "no" ]; then
+                print_info "Keeping existing resource group"
+                return 0
+                
+            elif [ "$delete_choice" = "abort" ]; then
+                print_info "Aborted by user"
+                exit 0
+            fi
+        elif [ "$DRY_RUN" = true ]; then
+            print_info "[DRY RUN] Would delete resource group: $rg_name"
+            return 0
+        fi
+        
+    else
+        print_info "Resource group does not exist. Will be created during deployment."
+    fi
+}
+
+
 # Check prerequisites for chatbot deployment
 if [ "$RUN_CHATBOT" = true ]; then
     if ! command -v npm &> /dev/null; then
@@ -285,6 +404,13 @@ echo ""
 
 if [ "$DRY_RUN" = true ]; then
     print_warning "DRY RUN MODE - No changes will be made"
+    echo ""
+fi
+
+# Check resource group if deployment steps are requested
+if [ "$RUN_DEPLOY" = true ] || [ "$RUN_MCP" = true ] || [ "$RUN_CHATBOT" = true ]; then
+    echo ""
+    check_resource_group "$RESOURCE_GROUP"
     echo ""
 fi
 

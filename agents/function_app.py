@@ -217,7 +217,8 @@ def query_data(req: func.HttpRequest) -> func.HttpResponse:
 
     try:
         req_body = req.get_json()
-    except ValueError:
+    except ValueError as e:
+        logging.error(f"Invalid JSON in request: {e}")
         return func.HttpResponse(
             json.dumps({"error": "Invalid JSON in request body"}),
             status_code=400,
@@ -226,6 +227,7 @@ def query_data(req: func.HttpRequest) -> func.HttpResponse:
 
     question = req_body.get("question")
     if not question:
+        logging.error("Missing 'question' in request body")
         return func.HttpResponse(
             json.dumps({"error": "Missing 'question' in request body"}),
             status_code=400,
@@ -233,14 +235,19 @@ def query_data(req: func.HttpRequest) -> func.HttpResponse:
         )
 
     try:
+        logging.info(f"Processing question: {question}")
         agent = get_agent()
 
         # Reset conversation if requested
         if req_body.get("reset_conversation", False):
+            logging.info("Resetting conversation history")
             agent.reset_conversation()
 
         # Ask the question
+        logging.info("Calling agent.ask()")
         response: AgentResponse = agent.ask(question)
+        
+        logging.info(f"Agent response received. Answer length: {len(response.answer) if response.answer else 0}")
 
         # Prepare response
         result = {
@@ -254,6 +261,7 @@ def query_data(req: func.HttpRequest) -> func.HttpResponse:
         if response.data is not None and len(response.data) <= 100:
             result["data"] = response.data.to_dict(orient="records")
 
+        logging.info("Returning successful response")
         return func.HttpResponse(
             json.dumps(result, default=str),
             status_code=200,
@@ -261,9 +269,9 @@ def query_data(req: func.HttpRequest) -> func.HttpResponse:
         )
 
     except Exception as e:
-        logging.error(f"Error processing query: {str(e)}")
+        logging.error(f"Error processing query: {str(e)}", exc_info=True)
         return func.HttpResponse(
-            json.dumps({"error": str(e)}),
+            json.dumps({"error": str(e), "answer": f"Error: {str(e)}"}),
             status_code=500,
             mimetype="application/json",
         )
@@ -283,7 +291,7 @@ def list_tables(req: func.HttpRequest) -> func.HttpResponse:
 
     try:
         agent = get_agent()
-        tables_df = agent.oracle.list_tables()
+        tables_df = agent.db.list_tables()
 
         return func.HttpResponse(
             json.dumps({
@@ -321,7 +329,7 @@ def get_table_structure(req: func.HttpRequest) -> func.HttpResponse:
 
     try:
         agent = get_agent()
-        structure_df = agent.oracle.get_table_structure(table_name)
+        structure_df = agent.db.get_table_structure(table_name)
 
         return func.HttpResponse(
             json.dumps({

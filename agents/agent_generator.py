@@ -940,6 +940,9 @@ resource functionApp 'Microsoft.Web/sites@2023-01-01' = {{
   name: functionAppName
   location: location
   kind: 'functionapp,linux'
+  identity: {{
+    type: 'SystemAssigned'
+  }}
   properties: {{
     serverFarmId: appServicePlan.id
     publicNetworkAccess: 'Enabled'
@@ -947,7 +950,7 @@ resource functionApp 'Microsoft.Web/sites@2023-01-01' = {{
       pythonVersion: '3.12'
       linuxFxVersion: 'Python|3.12'
       appSettings: [
-        {{ name: 'AzureWebJobsStorage', value: 'DefaultEndpointsProtocol=https;AccountName=${{storageAccount.name}};EndpointSuffix=${{environment().suffixes.storage}};AccountKey=${{storageAccount.listKeys().keys[0].value}}' }}
+        {{ name: 'AzureWebJobsStorage', value: 'BlobEndpoint=https://${{storageAccount.name}}.blob.core.windows.net/;' }}
         {{ name: 'FUNCTIONS_WORKER_RUNTIME', value: 'python' }}
         {{ name: 'FUNCTIONS_EXTENSION_VERSION', value: '~4' }}
         {{ name: 'ENABLE_ORYX_BUILD', value: 'true' }}
@@ -961,6 +964,21 @@ resource functionApp 'Microsoft.Web/sites@2023-01-01' = {{
       ]
     }}
   }}
+}}
+
+// Role assignment for Managed Identity to access storage
+// Must have explicit dependsOn to ensure proper ordering without circular dependency
+resource storageBlobRole 'Microsoft.Authorization/roleAssignments@2022-04-01' = {{
+  scope: storageAccount
+  name: guid(functionApp.id, storageAccount.id, 'b7e6dc6d-f1e8-4753-8033-0f276bb0955b')
+  properties: {{
+    principalId: functionApp.identity.principalId
+    roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', 'b7e6dc6d-f1e8-4753-8033-0f276bb0955b')
+    principalType: 'ServicePrincipal'
+  }}
+  dependsOn: [
+    functionApp
+  ]
 }}
 
 output functionAppName string = functionApp.name

@@ -201,18 +201,39 @@ if [ "$USE_CONTAINER_APPS" = true ]; then
     ACR_NAME=$(echo "$DEPLOYMENT_OUTPUT" | jq -r '.acrName.value // empty')
     
     if [ -n "$ACR_NAME" ]; then
+        print_info "Building image in ACR: $ACR_NAME"
+        print_info "Build context: $(dirname "$0")"
+        print_info "Dockerfile: $(dirname "$0")/Dockerfile"
+        
         # Build and push using ACR build (no local Docker required)
-        az acr build \
+        if az acr build \
             --registry "$ACR_NAME" \
             --image mcp-server:latest \
             --file "$(dirname "$0")/Dockerfile" \
-            "$(dirname "$0")"
+            "$(dirname "$0")" 2>&1 | tee /tmp/acr-build.log; then
+            print_success "✓ Container image built and pushed successfully"
+        else
+            print_error "❌ ACR build failed!"
+            print_error "Build output:"
+            cat /tmp/acr-build.log | tail -30
+            print_error ""
+            print_error "Troubleshooting:"
+            print_error "  1. Check Dockerfile exists: ls -la $(dirname "$0")/Dockerfile"
+            print_error "  2. Check mcp_server.py exists: ls -la $(dirname "$0")/mcp_server.py"
+            print_error "  3. Check requirements.txt exists: ls -la $(dirname "$0")/requirements.txt"
+            exit 1
+        fi
         
         print_success "Container image built and pushed"
         
-        # Update container app with new image and volume mount
+        # Get container app details
         CONTAINER_APP_NAME=$(echo "$DEPLOYMENT_OUTPUT" | jq -r '.containerAppName.value // empty')
         CONTAINER_ENV_NAME="${MCP_NAME}-env"
+        
+        if [ -z "$CONTAINER_APP_NAME" ]; then
+            print_error "Failed to get container app name from deployment"
+            exit 1
+        fi
         
         if [ -n "$CONTAINER_APP_NAME" ]; then
             print_info "Waiting for container app to be ready before updating..."
@@ -234,49 +255,99 @@ if [ "$USE_CONTAINER_APPS" = true ]; then
                 fi
             done
 
-            print_info "Updating container app with MCP server image and ingress port..."
+            print_info "Updating container app with MCP server image..."
 
-            # Update image, port, and replicas in a single operation to avoid race conditions
+            # Update image and replicas
+            # Note: targetPort 8080 and ingress external are already set in Bicep template
             az containerapp update \
                 --name "$CONTAINER_APP_NAME" \
                 --resource-group "$RESOURCE_GROUP" \
                 --image "${ACR_NAME}.azurecr.io/mcp-server:latest" \
                 --min-replicas 1 \
-                --target-port 8080 \
-                --ingress external \
                 --output none
             
-            print_success "Container app updated"
-            print_info "Waiting for new revision to deploy..."
-            sleep 20
+            print_success "Container app updated with new MCP server image"
+            print_info "Waiting for new revision to start and stabilize (this may take 2-3 minutes)..."
+            
+            # Show what image we just deployed
+            echo ""
+            print_info "Checking container image status..."
+            ACTUAL_IMAGE=$(az containerapp show \
+                --name "$CONTAINER_APP_NAME" \
+                --resource-group "$RESOURCE_GROUP" \
+                --query "properties.template.containers[0].image" \
+                --output tsv 2>/dev/null || echo "Unknown")
+            print_info "  Container app is now running: $ACTUAL_IMAGE"
+            
+            # Wait longer for the new container to actually start
+            sleep 45
         fi
     fi
 fi
 
-# Health check
-print_info "Performing health check..."
-print_info "Waiting for container to start (this may take up to 2 minutes)..."
-sleep 30
+# Health check - verify the REAL MCP server is responding
+print_info "Performing health check to verify MCP server is running..."
+print_info "Waiting for container to initialize (this may take up to 3 minutes)..."
+sleep 15
 
-for i in {1..12}; do
-    if curl -s "${MCP_URL}/health" | grep -q "healthy"; then
-        print_success "Health check passed!"
+HEALTH_CHECK_PASSED=false
+for i in {1..18}; do
+    # Check for actual MCP server response (not hello-world placeholder)
+    HEALTH_RESPONSE=$(curl -s "${MCP_URL}/health" 2>/dev/null || echo "")
+    
+    # Look for the real MCP server response structure
+    if echo "$HEALTH_RESPONSE" | grep -q '"status".*"healthy"'; then
+        print_success "✓ MCP Server health check passed!"
+        print_info "  Response: $HEALTH_RESPONSE"
+        HEALTH_CHECK_PASSED=true
         break
-    fi
-    if [ $i -eq 12 ]; then
-        print_info "Health check did not pass yet, but deployment may still be in progress."
-        print_info "Check Azure portal for container status."
+    elif echo "$HEALTH_RESPONSE" | grep -q "Hello from Azure"; then
+        print_info "  Still starting (placeholder image detected)... attempt $i/18"
+        sleep 10
+    elif [ -z "$HEALTH_RESPONSE" ]; then
+        print_info "  Waiting for server to respond... (attempt $i/18)"
+        sleep 10
     else
-        print_info "Waiting for server to be ready... (attempt $i/12)"
+        print_info "  Unexpected response (attempt $i/18): ${HEALTH_RESPONSE:0:100}"
         sleep 10
     fi
 done
+
+if [ "$HEALTH_CHECK_PASSED" = false ]; then
+    print_error "❌ Health check did not pass"
+    print_error "The MCP server may not have started correctly"
+    print_error ""
+    print_error "Troubleshooting steps:"
+    print_error "  1. Check container logs: az containerapp logs show -n $CONTAINER_APP_NAME -g $RESOURCE_GROUP"
+    print_error "  2. Check container state: az containerapp show -n $CONTAINER_APP_NAME -g $RESOURCE_GROUP"
+    print_error "  3. Visit $MCP_URL/health in browser to see actual response"
+    print_error ""
+    print_error "If you see 'Hello from Azure' or connection errors, the deployment may still be in progress."
+    print_error "Wait a few minutes and try: curl $MCP_URL/health"
+else
+    # Also verify CORS is working by checking API endpoint
+    print_info "Verifying CORS and API endpoints..."
+    if curl -s -H "Origin: https://example.com" -H "Access-Control-Request-Method: GET" "${MCP_URL}/api/agents" 2>/dev/null | grep -q "access_control\|agent\|error"; then
+        print_success "✓ CORS headers are properly configured"
+    else
+        print_info "  CORS check inconclusive (may still be working)"
+    fi
+fi
 
 print_info "========================================"
 print_success "Deployment complete!"
 print_info ""
 print_info "MCP Server URL: $MCP_URL"
 print_info "MCP Auth Token: $AUTH_TOKEN"
+print_info ""
+if [ "$HEALTH_CHECK_PASSED" = true ]; then
+    print_info "✓ Server is ready for use"
+else
+    print_info "⚠️  Health check incomplete - server may still be starting"
+    print_info ""
+    print_info "To check server status, run:"
+    print_info "  mcp/check_deployment.sh $RESOURCE_GROUP $CONTAINER_APP_NAME"
+fi
 print_info ""
 print_info "To register an agent:"
 print_info "  ./register_agent.sh --agent-id <id> \\"

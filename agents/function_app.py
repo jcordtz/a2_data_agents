@@ -248,6 +248,18 @@ def query_data(req: func.HttpRequest) -> func.HttpResponse:
         response: AgentResponse = agent.ask(question)
         
         logging.info(f"Agent response received. Answer length: {len(response.answer) if response.answer else 0}")
+        
+        # Validate that we have a response
+        if not response or not response.answer:
+            logging.error("Agent returned empty response")
+            return func.HttpResponse(
+                json.dumps({
+                    "error": "No response received from agent",
+                    "answer": "The agent did not return a response. This might be a timeout or configuration issue."
+                }),
+                status_code=500,
+                mimetype="application/json",
+            )
 
         # Prepare response
         result = {

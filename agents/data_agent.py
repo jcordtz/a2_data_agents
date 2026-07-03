@@ -614,16 +614,30 @@ You have access to a {self.db_type.upper()} database with the following context:
 {tables_context}
 
 You can use the available tools to:
-1. List tables in the database
-2. Get the structure of a specific table
-3. Execute SQL queries
-4. Load table data into a DataFrame
+1. list_tables - List all tables in the database
+2. get_table_structure - Get columns, types, and metadata for a specific table
+3. execute_query - Execute SELECT queries
+4. get_table_data - Load table data with optional filtering
+5. analyze_dataframe - Perform statistical analysis on results
+6. describe_table - Get a natural language description of a table
 
-When the user asks a question about data:
-1. First understand what tables and columns are relevant
-2. Use get_table_structure to understand the schema
-3. Write and execute appropriate SQL queries using {self.sql_syntax} syntax
-4. Explain the results clearly
+🔑 CRITICAL INSTRUCTIONS FOR SCHEMA QUERIES:
+
+When the user asks about TABLE STRUCTURE, COLUMNS, or SCHEMA (e.g., "what columns...", "show me the structure...", "what fields..."):
+→ ALWAYS use get_table_structure with the table_name
+→ Do NOT write SQL queries for this
+→ Return the column information directly
+
+Example queries that need get_table_structure:
+- "What columns are in the DEPARTMENTS table?"
+- "Show me the structure of EMPLOYEES"
+- "What fields are in the ORDERS table?"
+- "Tell me what columns this table has"
+
+When the user asks about DATA (e.g., "show me data", "how many records", "list the..."):
+→ First use get_table_structure to understand the schema
+→ Then execute appropriate SQL queries using {self.sql_syntax} syntax
+→ Explain the results clearly
 
 Always validate your SQL before executing. Use parameterized queries when possible.
 For large result sets, consider using LIMIT/FETCH FIRST clauses appropriate for {self.db_type.upper()}.
@@ -654,13 +668,13 @@ For large result sets, consider using LIMIT/FETCH FIRST clauses appropriate for 
                 "type": "function",
                 "function": {
                     "name": "get_table_structure",
-                    "description": "Get the column structure and metadata of a specific table",
+                    "description": "CRITICAL: Call this for ANY question about table columns, structure, fields, or schema. Returns column names, data types, and whether columns are nullable. Use this FIRST when asked what columns are in a table.",
                     "parameters": {
                         "type": "object",
                         "properties": {
                             "table_name": {
                                 "type": "string",
-                                "description": "Name of the table to describe",
+                                "description": "Name of the table (REQUIRED). Extract the exact table name from the user question.",
                             },
                             "schema": {
                                 "type": "string",
@@ -1064,6 +1078,12 @@ This table enables you to:
                 tool_calls=[]
             )
         
+        # Detect if this is a schema query and log it
+        schema_keywords = ["columns", "structure", "schema", "fields", "table structure", "columns in", "fields in"]
+        is_schema_query = any(keyword in question.lower() for keyword in schema_keywords)
+        if is_schema_query:
+            logger.info(f"Detected schema query: {question}")
+        
         logger.info(f"Starting agent loop (max {max_iterations} iterations) with deployment: {deployment_name}")
         logger.info(f"Available tools: {len(self.tools)}")
         
@@ -1086,6 +1106,21 @@ This table enables you to:
                 # If no tool calls, we have the final answer
                 if not message.tool_calls:
                     answer = message.content or "I couldn't generate a response."
+                    
+                    # Validate that we have a meaningful answer
+                    if not answer or answer.strip() == "":
+                        logger.error("Empty response from AI model")
+                        if is_schema_query and not tool_calls_made:
+                            logger.error("Schema query returned no tools - this indicates the AI didn't understand the request")
+                            return AgentResponse(
+                                answer="I couldn't understand your schema query. Please rephrase as: 'What are the columns in [TABLE_NAME]?'",
+                                tool_calls=tool_calls_made if tool_calls_made else None,
+                            )
+                        return AgentResponse(
+                            answer="No response was generated. Please try rephrasing your question.",
+                            tool_calls=tool_calls_made if tool_calls_made else None,
+                        )
+                    
                     logger.info(f"Final answer (no tool calls): {answer[:100]}...")
                     self.messages.append({"role": "assistant", "content": answer})
                     return AgentResponse(
@@ -1132,10 +1167,20 @@ This table enables you to:
                 )
 
         logger.warning("Reached maximum iterations without completing task")
-        return AgentResponse(
-            answer="I reached the maximum number of iterations without completing the task.",
-            tool_calls=tool_calls_made,
-        )
+        
+        # If we made tool calls but reached max iterations, there might be a tool error
+        if tool_calls_made:
+            logger.error(f"Tool calls made: {[call['tool'] for call in tool_calls_made]}")
+            return AgentResponse(
+                answer="I reached the maximum iterations while processing your request. The database query might be complex or there might be an error. Please try with a simpler question.",
+                tool_calls=tool_calls_made,
+            )
+        else:
+            logger.error("No tool calls made - AI didn't understand how to process the question")
+            return AgentResponse(
+                answer="I couldn't understand your question. Please try rephrasing it more clearly.",
+                tool_calls=tool_calls_made,
+            )
 
     def reset_conversation(self) -> None:
         """Reset the conversation history."""

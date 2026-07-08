@@ -72,7 +72,7 @@ resource functionApp 'Microsoft.Web/sites@2023-01-01' = {
       pythonVersion: '3.12'
       linuxFxVersion: 'Python|3.12'
       appSettings: [
-        { name: 'AzureWebJobsStorage', value: 'BlobEndpoint=https://${storageAccount.name}.blob.core.windows.net/;' }
+        { name: 'AzureWebJobsStorage', value: 'DefaultEndpointsProtocol=https;AccountName=${storageAccount.name};EndpointSuffix=core.windows.net;' }
         { name: 'FUNCTIONS_WORKER_RUNTIME', value: 'python' }
         { name: 'FUNCTIONS_EXTENSION_VERSION', value: '~4' }
         { name: 'ENABLE_ORYX_BUILD', value: 'true' }

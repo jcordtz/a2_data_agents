@@ -46,7 +46,7 @@
 #   --chatbot               Run only chatbot deployment
 #
 #   --csv <file>            CSV file for agent generation (default: sample_tables.csv)
-#   --output <dir>          Output directory for agents (default: ./generated_agents)
+#   --output <dir>          Output directory for agents (default: \\$HOME/work)
 #   --resource-group <rg>   Azure resource group (required for deployment)
 #   --location <loc>        Azure location (default: eastus)
 #   --mcp-url <url>         MCP server URL (for registration/chatbot)
@@ -138,7 +138,7 @@ usage() {
     echo ""
     echo "Configuration:"
     echo "  --csv <file>            CSV file for generation (default: sample_tables.csv)"
-    echo "  --output <dir>          Output directory for agents (default: $HOME/work)"
+    echo "  --output <dir>          Output directory for agents (default: \\$HOME/work)"
     echo "  --resource-group <rg>   Azure resource group (required for deployment)"
     echo "  --location <loc>        Azure location (default: eastus)"
     echo "  --mcp-url <url>         MCP server URL (for registration/chatbot)"

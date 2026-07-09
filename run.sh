@@ -89,7 +89,7 @@ NC='\033[0m' # No Color
 # Default configuration
 CSV_FILE="sample_tables.csv"
 OUTPUT_DIR="$HOME/work"
-RESOURCE_GROUP="a2-data-agent-res"
+RESOURCE_GROUP="data-agents-res"
 LOCATION="eastus"
 MCP_URL=""
 MCP_TOKEN=""
@@ -138,7 +138,7 @@ usage() {
     echo ""
     echo "Configuration:"
     echo "  --csv <file>            CSV file for generation (default: sample_tables.csv)"
-    echo "  --output <dir>          Output directory for agents (default: ./generated_agents)"
+    echo "  --output <dir>          Output directory for agents (default: $HOME/work)"
     echo "  --resource-group <rg>   Azure resource group (required for deployment)"
     echo "  --location <loc>        Azure location (default: eastus)"
     echo "  --mcp-url <url>         MCP server URL (for registration/chatbot)"
